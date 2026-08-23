@@ -105,6 +105,11 @@ public enum Constants {
         source: design,
         note: "Inner edge of the annulus where captured and escaped particles respawn.")
 
+    public static let diskSlabHalfHeight = Constant<Double>(
+        "DISK_SLAB_HALF_HEIGHT", 6.0,
+        source: design,
+        note: "Rays sample the volume only within this height of the disk plane. Seeding puts gas within 0.05 r Gaussian of the plane, so at the outer edge five sigma is 6; vertical oscillation amplitudes are conserved under gravity and shrink under drag.")
+
     public static let volumeHalfExtent = Constant<Double>(
         "VOLUME_HALF_EXTENT", 30.0,
         source: design,
@@ -201,15 +206,40 @@ public enum Constants {
 
     // MARK: Rendering
 
-    public static let spriteRadius = Constant<Double>(
-        "SPRITE_RADIUS", 0.08,
-        source: design,
-        note: "Stylized. World space radius of a particle point sprite.")
-
     public static let exposure = Constant<Double>(
-        "EXPOSURE_DEFAULT", 0.35,
+        "EXPOSURE_DEFAULT", 1.0,
         source: design,
-        note: "Stylized. Linear scale applied to accumulated emission before tone mapping.")
+        note: "Stylized. Linear scale applied to the lensed image before tone mapping.")
+
+    public static let emissionScale = Constant<Double>(
+        "EMISSION_SCALE", 0.0005,
+        source: design,
+        note: "Stylized. Emission per particle at the peak temperature, per unit volume and path length, before the g^3 factor.")
+
+    public static let gasSpeedCeiling = Constant<Double>(
+        "GAS_SPEED_CEILING", 0.85,
+        source: design,
+        note: "Stylized. The simulated gas speed is compressed to beta = ceiling tanh(v / ceiling) before the Doppler factor, since pseudo Newtonian orbits exceed c inside r of about 4; the innermost stable orbit speed 0.61 maps to 0.52, close to the Schwarzschild value 0.5.")
+
+    public static let volumeOpacity = Constant<Double>(
+        "VOLUME_OPACITY", 0.0005,
+        source: design,
+        note: "Stylized. Extinction per unit path length per unit particle density; small so the far side of the disk and its lensed images stay visible.")
+
+    public static let starBrightness = Constant<Double>(
+        "STAR_BRIGHTNESS", 1.5,
+        source: design,
+        note: "Stylized. Scale of the procedural starfield behind escaped rays.")
+
+    public static let stillSettleSteps = Constant<UInt32>(
+        "STILL_SETTLE_STEPS", 600,
+        source: design,
+        note: "Substeps simulated before an offline still so the plunging region is populated; the drift time from r = 7 to the innermost stable orbit is about 320 substeps.")
+
+    public static let stillTile = Constant<UInt32>(
+        "STILL_TILE", 128,
+        source: design,
+        note: "Tile edge in pixels for offline stills; one tile is one command buffer, far below the 30 ms ceiling even at the still step cap.")
 
     // MARK: Safety
 
@@ -231,12 +261,12 @@ public enum Constants {
     /// Every constant, in the order they appear in the generated header.
     public static let all: [any ConstantEntry] = [
         schwarzschildRadius, photonSphere, isco, marginallyBound, criticalImpactParameter, weakDeflectionCoefficient,
-        captureRadius, escapeRadius, diskOuterRadius, feedInnerRadius, volumeHalfExtent,
+        captureRadius, escapeRadius, diskOuterRadius, feedInnerRadius, diskSlabHalfHeight, volumeHalfExtent,
         simulationTimestep, simulationSubsteps, dragAlpha, feedVelocityDispersion, diskAspectRatio,
         peakTemperature, zeroTorqueFloor, blackbodyMinTemperature, blackbodyMaxTemperature, blackbodyTableSize,
         stepCapInteractive, stepCapStill, stepRadiusFactor, stepMin, stepMax, bakeSamples,
         driftBudgetInteractive, driftBudgetStill,
-        spriteRadius, exposure,
+        exposure, emissionScale, gasSpeedCeiling, volumeOpacity, starBrightness, stillSettleSteps, stillTile,
         commandBufferBudgetMilliseconds, memoryBudgetFraction, memoryBudgetCapBytes,
     ]
 }

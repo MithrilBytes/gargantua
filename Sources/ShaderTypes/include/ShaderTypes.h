@@ -52,8 +52,83 @@ typedef struct {
     simd_float4 hudRect;
     float exposure;
     unsigned int hudVisible;
+    unsigned int debugView;
+    float driftBudget;
+} PresentUniforms;
+
+/// Geodesic integration policy, shared by the image kernel and the probes.
+typedef struct {
+    float stepFactor;
+    float stepMin;
+    float stepMax;
+    float captureRadius;
+    float escapeRadius;
+    unsigned int stepCap;
     float padding0;
     float padding1;
-} PresentUniforms;
+} GeodesicSettings;
+
+enum {
+    RayCaptured = 0,
+    RayEscaped = 1,
+    RayExhausted = 2
+};
+
+/// One ray integrated outside the image path, for validation.
+typedef struct {
+    packed3 origin;
+    packed3 direction;
+} RayProbe;
+
+typedef struct {
+    packed3 position;
+    packed3 direction;
+    float drift;
+    unsigned int outcome;
+    unsigned int steps;
+    float energy;
+    float angularMomentum;
+} RayProbeResult;
+
+typedef struct {
+    unsigned int volumeSize;
+    unsigned int particleCount;
+    float halfExtent;
+    float peakTemperature;
+    float emissionScale;
+    float padding0;
+    float padding1;
+    float padding2;
+} SplatUniforms;
+
+typedef struct {
+    simd_float3 cameraPosition;
+    simd_float3 cameraRight;
+    simd_float3 cameraUp;
+    simd_float3 cameraForward;
+    /// tan(fov / 2) scaled by aspect in x.
+    simd_float2 tanHalfFov;
+    /// Full image size in pixels.
+    simd_uint2 resolution;
+    /// Pixel offset of the tile being rendered.
+    simd_uint2 tileOrigin;
+    float volumeHalfExtent;
+    float opacityScale;
+    float starBrightness;
+    float driftBudget;
+    unsigned int starSeed;
+    unsigned int redshift;
+    float padding0;
+    float padding1;
+    GeodesicSettings geodesic;
+} MarchUniforms;
+
+/// Per frame ray statistics, summed by the march kernel.
+typedef struct {
+    unsigned int rays;
+    unsigned int overDriftBudget;
+    unsigned int exhausted;
+    unsigned int captured;
+} MarchCounters;
 
 #endif

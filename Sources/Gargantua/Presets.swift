@@ -44,11 +44,17 @@ struct Configuration: Sendable {
 
     /// Named allocations the configuration implies, before any are made.
     var allocations: [(name: String, bytes: UInt64)] {
-        [
+        let voxels = UInt64(volume) * UInt64(volume) * UInt64(volume)
+        let pixels = UInt64(marchWidth) * UInt64(marchHeight)
+        return [
             ("particles", UInt64(particles) * Configuration.particleStride),
             ("seeding table", UInt64(Configuration.inverseCdfCount) * 4),
             ("blackbody table", UInt64(Constants.blackbodyTableSize.value) * 8),
-            ("hdr target", UInt64(marchWidth) * UInt64(marchHeight) * 8),
+            ("volume sums", voxels * 7 * 4),
+            ("emission volume", voxels * 8),
+            ("velocity volume", voxels * 8),
+            ("march target", pixels * 8),
+            ("debug target", pixels * 8),
         ]
     }
 

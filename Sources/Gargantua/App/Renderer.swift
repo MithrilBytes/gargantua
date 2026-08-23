@@ -17,8 +17,10 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
     private let view: MTKView
     private var configuration: Configuration
     private let simPass: SimPass
-    private let spritePass: SpritePass
+    private let splatPass: SplatPass
+    private let marchPass: MarchPass
     private let presentPass: PresentPass
+    private var volume: Volume
     private let capture: Capture
     private let hudRenderer: HudRenderer
     private var system: ParticleSystem
@@ -27,9 +29,10 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
     private var paused = false
     private var hudVisible = true
     private var needsSeed = true
+    private var validation = "pending"
     private var screenshotRequested = false
     private var previousFrameTime: Double?
-    private var lastCommandBuffer: MTLCommandBuffer?
+    private var recentCommandBuffers: [MTLCommandBuffer] = []
     private var soak: Soak?
     private let inflight = DispatchSemaphore(value: 3)
     private let maxAllowed: Bool
@@ -57,8 +60,10 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
 
         simPass = SimPass(context: context)
-        spritePass = SpritePass(context: context)
+        splatPass = SplatPass(context: context)
+        marchPass = MarchPass(context: context)
         presentPass = PresentPass(context: context, pixelFormat: view.colorPixelFormat)
+        volume = Volume(context: context, size: configuration.volume)
         capture = Capture(context: context, presentPass: presentPass, pixelFormat: view.colorPixelFormat)
         hudRenderer = HudRenderer(device: context.device)
         system = ParticleSystem(context: context, count: configuration.particles, seed: configuration.seed, potential: .paczynskiWiita)
@@ -66,15 +71,18 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
             soak = Soak(start: CACurrentMediaTime(), seconds: seconds)
             stats.recording = true
         }
-        spritePass.exposure = Float(Constants.exposure.value)
+        presentPass.exposure = Float(Constants.exposure.value)
         super.init()
-        spritePass.resize(width: configuration.marchWidth, height: configuration.marchHeight)
+        marchPass.resize(width: configuration.marchWidth, height: configuration.marchHeight)
+        let clear = context.makeCommandBuffer(label: "clear volume")
+        volume.encodeClear(clear)
+        clear.commit()
     }
 
     // MARK: MTKViewDelegate
 
     nonisolated func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-        // The sprite target is sized by the preset, not the window; the
+        // The march target is sized by the preset, not the window; the
         // present pass scales it to whatever the drawable is.
     }
 
@@ -86,15 +94,20 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         let now = CACurrentMediaTime()
         stats.recordFrame(now: now, previous: previousFrameTime)
         previousFrameTime = now
-        if let last = lastCommandBuffer, last.status == .completed {
-            stats.recordGpu(seconds: last.gpuEndTime - last.gpuStartTime)
-            lastCommandBuffer = nil
+        for buffer in recentCommandBuffers where buffer.status == .completed {
+            stats.recordGpu(seconds: buffer.gpuEndTime - buffer.gpuStartTime)
         }
+        recentCommandBuffers.removeAll { $0.status == .completed || $0.status == .error }
 
         inflight.wait()
-        guard let drawable = view.currentDrawable, let pass = view.currentRenderPassDescriptor, let hdr = spritePass.target else {
+        guard let drawable = view.currentDrawable, let pass = view.currentRenderPassDescriptor, let hdr = marchPass.output else {
             inflight.signal()
             return
+        }
+        let counters = marchPass.readCounters()
+        if counters.rays > 0 {
+            let percent = 100.0 * Double(counters.overDriftBudget) / Double(counters.rays)
+            validation = String(format: "drift over budget %.2f percent, %u exhausted, %u captured", percent, counters.exhausted, counters.captured)
         }
         let commandBuffer = context.makeCommandBuffer(label: "frame")
         if needsSeed {
@@ -104,15 +117,19 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         if !paused {
             simPass.encodeStep(commandBuffer, system: system)
         }
-        spritePass.encode(commandBuffer, system: system, camera: camera)
+        splatPass.encode(commandBuffer, system: system, volume: volume)
+        let uniforms = MarchPass.uniforms(camera: camera, width: hdr.width, height: hdr.height, settings: .interactive,
+                                          driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
+                                          starSeed: UInt32(truncatingIfNeeded: system.seed))
+        marchPass.encodeFrame(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody)
         let scale = view.window?.backingScaleFactor ?? 2
         let hudTexture = hudVisible ? hudRenderer.texture(for: Hud.lines(hudState()), scale: scale) : nil
-        presentPass.encode(commandBuffer, pass: pass, hdr: hdr, hudTexture: hudTexture,
+        presentPass.encode(commandBuffer, pass: pass, hdr: hdr, debug: marchPass.debug, hudTexture: hudTexture,
                            targetWidth: drawable.texture.width, targetHeight: drawable.texture.height)
         if screenshotRequested {
             screenshotRequested = false
             let finishing = soak?.finishing ?? false
-            capture.encode(commandBuffer, hdr: hdr) { url in
+            capture.encodeScreenshot(commandBuffer, hdr: hdr) { url in
                 Task { @MainActor in
                     Console.line(url.map { "screenshot \($0.path)" } ?? "screenshot failed to write")
                     if finishing { self.quit() }
@@ -123,7 +140,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         let semaphore = inflight
         commandBuffer.addCompletedHandler { _ in semaphore.signal() }
         commandBuffer.commit()
-        lastCommandBuffer = commandBuffer
+        recentCommandBuffers.append(commandBuffer)
 
         if var run = soak, !run.finishing, now - run.start >= run.seconds {
             run.finishing = true
@@ -145,7 +162,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
             gpuMilliseconds: stats.gpuDisplayed * 1000,
             paused: paused,
             gpuErrors: stats.gpuErrors,
-            validation: "not run")
+            validation: validation)
     }
 
     /// End a soak through the requested path. The key paths inject a real
@@ -178,7 +195,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
     func shutdown() {
         view.isPaused = true
         view.delegate = nil
-        lastCommandBuffer?.waitUntilCompleted()
+        recentCommandBuffers.last?.waitUntilCompleted()
     }
 
     // MARK: InputHandler
@@ -197,7 +214,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         case .hud:
             hudVisible.toggle()
         case .debug:
-            break
+            presentPass.debugView.toggle()
         case .presetSmall, .presetDefault, .presetMax:
             break
         }
