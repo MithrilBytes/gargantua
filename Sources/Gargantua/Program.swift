@@ -13,8 +13,8 @@ enum Program {
             FileHandle.standardOutput.write(Data(MetalHeader.render().utf8))
         case .interactive:
             Application.run(options)
-        case .still:
-            Exit.operational("Still rendering arrives with the march pass in a later milestone.")
+        case .still(let path):
+            Still.render(options, path: path)
         case .bench:
             Exit.operational("The bench subcommand arrives in a later milestone.")
         case .validate:
