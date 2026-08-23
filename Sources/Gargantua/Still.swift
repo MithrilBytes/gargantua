@@ -21,6 +21,7 @@ enum Still {
 
         let simPass = SimPass(context: context)
         let splatPass = SplatPass(context: context)
+        splatPass.exactDeposit = true
         let marchPass = MarchPass(context: context)
         let presentPass = PresentPass(context: context, pixelFormat: .bgra8Unorm_srgb)
         let capture = Capture(context: context, presentPass: presentPass, pixelFormat: .bgra8Unorm_srgb)

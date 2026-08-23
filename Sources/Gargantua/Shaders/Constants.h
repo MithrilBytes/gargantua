@@ -79,6 +79,10 @@
 // Source: gargantua design choice, see note.
 #define ZERO_TORQUE_FLOOR (0.01f)
 
+// Corners of the trilinear cloud in cell deposit. Interactive frames choose one corner per particle with the trilinear weights as probabilities, an unbiased estimate whose expectation is the exact deposit; stills deposit into all eight.
+// Source: Hockney, R. W. and Eastwood, J. W., 1988. Computer Simulation Using Particles. Taylor and Francis, ch. 5 (cloud in cell weighting).
+#define CIC_CORNERS (8u)
+
 // Lowest temperature in the blackbody color table, kelvin. The table is log spaced.
 // Source: gargantua design choice, see note.
 #define BLACKBODY_T_MIN (1000.0f)

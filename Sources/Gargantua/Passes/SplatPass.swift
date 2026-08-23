@@ -14,6 +14,10 @@ final class SplatPass {
         resolve = context.computePipeline("splat.metal", "resolveVolume", preciseMath: false)
     }
 
+    /// Stills and other one shot paths deposit into all eight corners.
+    var exactDeposit = false
+    private var frame: UInt32 = 0
+
     private func uniforms(system: ParticleSystem, volume: Volume) -> SplatUniforms {
         SplatUniforms(
             volumeSize: UInt32(volume.size),
@@ -21,7 +25,9 @@ final class SplatPass {
             halfExtent: Float(Constants.volumeHalfExtent.value),
             peakTemperature: Float(Constants.peakTemperature.value),
             emissionScale: Float(Constants.emissionScale.value),
-            padding0: 0, padding1: 0, padding2: 0)
+            frame: frame,
+            exactDeposit: exactDeposit ? 1 : 0,
+            seed: SIMD2(UInt32(truncatingIfNeeded: system.seed), UInt32(truncatingIfNeeded: system.seed >> 32)))
     }
 
     /// The binning dispatch alone; the bench times the phases separately.
@@ -66,5 +72,6 @@ final class SplatPass {
         encodeBin(commandBuffer, system: system, volume: volume)
         encodeResolve(commandBuffer, system: system, volume: volume)
         volume.encodeClear(commandBuffer)
+        frame &+= 1
     }
 }

@@ -80,7 +80,7 @@ enum Repo {
         for file in Repo.textFiles() where file.pathExtension == "metal" {
             let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
             for line in text.split(separator: "\n") where line.contains("for (") || line.contains("while (") {
-                let capped = line.contains("_CAP") || line.contains("SIM_SUBSTEPS") || line.contains("BAKE_SAMPLES") || line.contains("BLACKBODY_TABLE_SIZE")
+                let capped = line.contains("_CAP") || line.contains("SIM_SUBSTEPS") || line.contains("BAKE_SAMPLES") || line.contains("BLACKBODY_TABLE_SIZE") || line.contains("CIC_CORNERS")
                 #expect(capped, Comment(rawValue: "\(file.lastPathComponent): \(line.trimmingCharacters(in: .whitespaces))"))
             }
         }

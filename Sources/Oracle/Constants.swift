@@ -164,6 +164,11 @@ public enum Constants {
         source: design,
         note: "Highest temperature in the blackbody color table, kelvin.")
 
+    public static let cicCorners = Constant<UInt32>(
+        "CIC_CORNERS", 8,
+        source: "Hockney, R. W. and Eastwood, J. W., 1988. Computer Simulation Using Particles. Taylor and Francis, ch. 5 (cloud in cell weighting).",
+        note: "Corners of the trilinear cloud in cell deposit. Interactive frames choose one corner per particle with the trilinear weights as probabilities, an unbiased estimate whose expectation is the exact deposit; stills deposit into all eight.")
+
     public static let blackbodyTableSize = Constant<UInt32>(
         "BLACKBODY_TABLE_SIZE", 256,
         source: design,
@@ -308,7 +313,7 @@ public enum Constants {
         schwarzschildRadius, photonSphere, isco, marginallyBound, criticalImpactParameter, weakDeflectionCoefficient,
         captureRadius, escapeRadius, diskOuterRadius, feedInnerRadius, diskSlabHalfHeight, volumeHalfExtent,
         simulationTimestep, simulationSubsteps, dragAlpha, feedVelocityDispersion, diskAspectRatio,
-        peakTemperature, zeroTorqueFloor, blackbodyMinTemperature, blackbodyMaxTemperature, blackbodyTableSize,
+        peakTemperature, zeroTorqueFloor, cicCorners, blackbodyMinTemperature, blackbodyMaxTemperature, blackbodyTableSize,
         stepCapInteractive, stepCapStill, stepRadiusFactor, stepMin, stepMax,
         emptyStepFactorInteractive, emptyStepMaxInteractive, emptyStepFactorStill, emptyStepMaxStill,
         marchThreadgroupWidth, marchThreadgroupHeight, bakeSamples, bakeSpacingVoxels, bakeFrames, sweepTableSize,

@@ -97,9 +97,12 @@ typedef struct {
     float halfExtent;
     float peakTemperature;
     float emissionScale;
-    float padding0;
-    float padding1;
-    float padding2;
+    /// Changes every frame; salts the stochastic deposit.
+    unsigned int frame;
+    /// 1 deposits into all eight cloud in cell corners with their weights;
+    /// 0 picks one corner per particle with those weights as probabilities.
+    unsigned int exactDeposit;
+    simd_uint2 seed;
 } SplatUniforms;
 
 typedef struct {
