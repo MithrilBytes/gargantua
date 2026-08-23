@@ -112,9 +112,14 @@ static MarchResult marchRay(float3 origin, float3 direction, constant MarchUnifo
         previous = position;
         if (ray.s.r >= u.geodesic.escapeRadius) { outcome = RayEscaped; break; }
     }
-    if (gather && outcome != RayCaptured) {
-        // Exhausted rays are counted by the caller; shading the sky along
-        // their last direction is the least wrong thing to draw for them.
+    // A ray that ran out of steps still has an exact fate: moving inward
+    // with impact parameter below 3 sqrt(3) it is captured, otherwise it
+    // escapes. Exhausted rays are counted by the caller either way; the sky
+    // along the last direction is the least wrong thing to draw for the
+    // escaping ones.
+    bool fallsIn = outcome == RayCaptured ||
+        (outcome == RayExhausted && ray.s.rDot < 0.0f && abs(ray.angularMomentum) < B_CRITICAL * ray.energy);
+    if (gather && !fallsIn) {
         color += transmittance * u.starBrightness * starfield(rayDirection(ray), u.starSeed, blackbody);
     }
     rayOut = ray;
