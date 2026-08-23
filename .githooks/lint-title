@@ -1,0 +1,12 @@
+#!/bin/sh
+# Reads one commit title on stdin and enforces the repository rule:
+# imperative, lower case, 50 characters or fewer, one of the allowed prefixes,
+# no em dash or en dash. Exit 0 when the title passes.
+title=$(sed -n '1p')
+fail() { printf 'commit title rejected: %s\n  "%s"\n' "$1" "$title" >&2; exit 1; }
+[ -n "$title" ] || fail "empty title"
+[ "$(printf '%s' "$title" | wc -m | tr -d ' ')" -le 50 ] || fail "longer than 50 characters"
+printf '%s' "$title" | grep -Eq '^(add|fix|rm|docs|test|perf) [a-z0-9][a-z0-9 ,.()/]*$' \
+  || fail "must be lower case, start with add, fix, rm, docs, test or perf, and use only letters, digits, spaces and , . ( ) /"
+printf '%s' "$title" | perl -CS -ne 'exit 1 if /[\x{2013}\x{2014}]/' || fail "contains an em dash or en dash"
+exit 0

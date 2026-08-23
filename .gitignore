@@ -1,0 +1,13 @@
+.build/
+.swiftpm/
+/Gargantua.app/
+.DS_Store
+*.xcodeproj
+*.xcworkspace
+.env
+*.pem
+*.key
+*.o
+*.d
+*.dia
+*.swiftdeps
