@@ -36,6 +36,9 @@ struct MarchResult {
     /// Opacity weighted distance along the ray to the gas it saw, or the
     /// distance travelled when it saw none.
     float depth;
+    /// Opacity weighted gas velocity at that gas, world units per code time,
+    /// so the upscaler can track content motion, not just camera motion.
+    float3 gasVelocity;
 };
 
 // Whether a ray that ended falls into the hole: captured, or out of steps
@@ -60,6 +63,7 @@ static MarchResult marchRay(PlaneRay launched, constant MarchUniforms& u, bool g
     uint steps = 0u;
     float travelled = 0.0f;
     float weightedDepth = 0.0f;
+    float3 weightedVelocity = float3(0.0f);
     float depthWeight = 0.0f;
     for (uint k = 0u; k < STEP_CAP_STILL; ++k) {
         if (k >= u.geodesic.stepCap) break;
@@ -90,6 +94,7 @@ static MarchResult marchRay(PlaneRay launched, constant MarchUniforms& u, bool g
                 color += contribution;
                 float weight = dot(contribution, float3(0.2126f, 0.7152f, 0.0722f));
                 weightedDepth += weight * travelled;
+                weightedVelocity += weight * s.velocity;
                 depthWeight += weight;
                 transmittance *= 1.0f - alpha;
             }
@@ -107,6 +112,7 @@ static MarchResult marchRay(PlaneRay launched, constant MarchUniforms& u, bool g
     result.outcome = outcome;
     result.leftSphere = leftSphere;
     result.depth = depthWeight > 0.0f ? weightedDepth / depthWeight : travelled;
+    result.gasVelocity = depthWeight > 0.0f ? weightedVelocity / depthWeight : float3(0.0f);
     return result;
 }
 
@@ -116,17 +122,6 @@ static MarchResult marchRay(PlaneRay launched, constant MarchUniforms& u, bool g
 static inline float3 skyDirection(PlaneRay ray, MarchResult m, constant MarchUniforms& u,
                                   texture1d<float, access::sample> sphereSweep) {
     return m.leftSphere ? sphereExitDirection(ray, u, sphereSweep) : rayDirection(ray);
-}
-
-// Pixel position of a world point in the previous frame's camera, for the
-// temporal upscaler. Straight line reprojection; the lensing makes it an
-// approximation, which shows as ghosting during fast camera moves.
-static float2 previousPixel(float3 point, constant MarchUniforms& u) {
-    float3 d = point - u.previousPosition;
-    float z = max(dot(d, u.previousForward), 1e-3f);
-    float sx = dot(d, u.previousRight) / z / u.tanHalfFov.x;
-    float sy = dot(d, u.previousUp) / z / u.tanHalfFov.y;
-    return float2(0.5f * (sx + 1.0f) * float(u.resolution.x), 0.5f * (1.0f - sy) * float(u.resolution.y));
 }
 
 kernel void marchImage(texture2d<half, access::write> output [[texture(0)]],
@@ -156,6 +151,7 @@ kernel void marchImage(texture2d<half, access::write> output [[texture(0)]],
         float3 direction = normalize(u.cameraForward + ndc.x * u.cameraRight + ndc.y * u.cameraUp);
         PreparedRay prepared = prepareRay(u.cameraPosition, direction, u, sphereSweep, cameraSweep, skySweep);
         float depth = 2.0f * R_ESCAPE;
+        float3 gasVelocity = float3(0.0f);
         if (prepared.skyOnly) {
             color = u.starBrightness * starfield(prepared.sky, u.starSeed, blackbody);
         } else {
@@ -166,6 +162,7 @@ kernel void marchImage(texture2d<half, access::write> output [[texture(0)]],
             steps = m.steps;
             outcome = m.outcome;
             depth = m.depth;
+            gasVelocity = m.gasVelocity;
             if (!rayFallsIn(ray, outcome)) {
                 color += m.transmittance * u.starBrightness * starfield(skyDirection(ray, m, u, sphereSweep), u.starSeed, blackbody);
             }
@@ -173,7 +170,11 @@ kernel void marchImage(texture2d<half, access::write> output [[texture(0)]],
         output.write(half4(half3(color), 1.0h), local);
         debug.write(half4(half(drift), half(float(steps)), half(float(outcome)), 1.0h), local);
         float3 point = u.cameraPosition + direction * depth;
-        float2 motion = previousPixel(point, u) - (float2(pixel) + 0.5f);
+        // Where this pixel's gas was one frame ago: behind the camera
+        // reprojection and behind its own motion through the volume. One
+        // frame advances the simulation by SIM_DT * SIM_SUBSTEPS code time.
+        float3 gasDisplacement = gasVelocity * (SIM_DT * float(SIM_SUBSTEPS));
+        float2 motion = previousPixel(point - gasDisplacement, u) - (float2(pixel) + 0.5f);
         depthOut.write(float4(min(depth / (2.0f * R_ESCAPE), 1.0f), 0.0f, 0.0f, 0.0f), local);
         motionOut.write(half4(half2(motion), 0.0h, 0.0h), local);
     }
