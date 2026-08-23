@@ -235,15 +235,4 @@ static inline float redshiftFactor(float f, float3 direction, float3 gas) {
     return sqrt(max(f, 0.0f)) / (gamma * (1.0f + dot(direction, velocity)));
 }
 
-// Pixel position of a world point in the previous frame's camera, for the
-// temporal upscaler. Straight line reprojection; the lensing makes it an
-// approximation, which shows as ghosting during fast camera moves.
-static float2 previousPixel(float3 point, constant MarchUniforms& u) {
-    float3 d = point - u.previousPosition;
-    float z = max(dot(d, u.previousForward), 1e-3f);
-    float sx = dot(d, u.previousRight) / z / u.tanHalfFov.x;
-    float sy = dot(d, u.previousUp) / z / u.tanHalfFov.y;
-    return float2(0.5f * (sx + 1.0f) * float(u.resolution.x), 0.5f * (1.0f - sy) * float(u.resolution.y));
-}
-
 #endif

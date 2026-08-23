@@ -111,8 +111,6 @@ kernel void walkRays(texture2d<half, access::write> output [[texture(0)]],
     float3 color = float3(0.0f);
     float transmittance = 1.0f;
     float3 previous = u.cameraPosition;
-    float3 weightedVelocity = float3(0.0f);
-    float weightSum = 0.0f;
     for (uint k = 0u; k < BAKE_SAMPLES; ++k) {
         if (k >= header.count || k >= u.bakeCapacity || transmittance <= 0.004f) break;
         half4 stored = slot[k];
@@ -122,18 +120,14 @@ kernel void walkRays(texture2d<half, access::write> output [[texture(0)]],
         half4 e = emission.sample(trilinear, uvw);
         if (e.a > 0.0h) {
             float3 direction = normalize(position - previous);
-            float3 gas = float3(velocity.sample(trilinear, uvw).xyz);
             float g3 = 1.0f;
             if (u.redshift != 0u) {
+                float3 gas = float3(velocity.sample(trilinear, uvw).xyz);
                 float g = redshiftFactor(schwarzschildF(length(position)), direction, gas);
                 g3 = g * g * g;
             }
             float alpha = 1.0f - exp(-u.opacityScale * float(e.a) * pathLength);
-            float3 contribution = transmittance * float3(e.rgb) * g3 * pathLength;
-            color += contribution;
-            float weight = dot(contribution, float3(0.2126f, 0.7152f, 0.0722f));
-            weightedVelocity += weight * gas;
-            weightSum += weight;
+            color += transmittance * float3(e.rgb) * g3 * pathLength;
             transmittance *= 1.0f - alpha;
         }
         previous = position;
@@ -145,16 +139,6 @@ kernel void walkRays(texture2d<half, access::write> output [[texture(0)]],
         color += transmittance * u.starBrightness * starfield(direction, u.starSeed, blackbody);
     }
     output.write(half4(half3(color), 1.0h), pixel);
-    float normalizedDepth = float(unpackHalf2(header.directionZDepth).y);
-    depthOut.write(float4(normalizedDepth, 0.0f, 0.0f, 0.0f), pixel);
-    // The camera is static while walking, so the only motion is the gas's own.
-    float2 sample = float2(pixel) + 0.5f;
-    float2 ndc = float2((2.0f * sample.x / float(u.resolution.x) - 1.0f) * u.tanHalfFov.x,
-                        (1.0f - 2.0f * sample.y / float(u.resolution.y)) * u.tanHalfFov.y);
-    float3 direction = normalize(u.cameraForward + ndc.x * u.cameraRight + ndc.y * u.cameraUp);
-    float3 gasVelocity = weightSum > 0.0f ? weightedVelocity / weightSum : float3(0.0f);
-    float3 point = u.cameraPosition + direction * (normalizedDepth * 2.0f * R_ESCAPE);
-    float3 gasDisplacement = gasVelocity * (SIM_DT * float(SIM_SUBSTEPS));
-    float2 motion = previousPixel(point - gasDisplacement, u) - sample;
-    motionOut.write(half4(half2(motion), 0.0h, 0.0h), pixel);
+    depthOut.write(float4(float(unpackHalf2(header.directionZDepth).y), 0.0f, 0.0f, 0.0f), pixel);
+    motionOut.write(half4(0.0h), pixel);
 }
