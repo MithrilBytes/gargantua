@@ -1,0 +1,9 @@
+{
+  "name": "sky",
+  "claim": "sky directions from the sweep tables match the oracle integrated to large radius",
+  "kind": "absolute",
+  "expected": 0,
+  "tolerance": 0.001,
+  "method": "Launch a columns by rows grid of camera rays with the sphere jump enabled on the GPU and report the largest angle between each escaping ray's asymptotic direction and the oracle's direction after integrating the same ray to oracleRadius; every ray must agree on whether it escapes.",
+  "parameters": { "columns": 8, "rows": 8, "oracleRadius": 1000000 }
+}
