@@ -188,6 +188,9 @@ Stylized, by design and named as such in `Sources/Oracle/Constants.swift`:
   Schwarzschild value 0.5.
 - `DRAG_ALPHA`, `FEED_VELOCITY_DISPERSION` and `DISK_ASPECT`, which set the
   inflow rate, the orbital dispersion and the disk thickness.
+- `BEAMING_DENSITY_FLOOR`: Doppler beaming fades out in voxels too sparse
+  to have a meaningful bulk velocity, so lone plunging particles do not
+  strobe; gravitational redshift always applies.
 - `EMISSION_SCALE`, `VOLUME_OPACITY`, `STAR_BRIGHTNESS` and
   `EXPOSURE_DEFAULT`, which set the look of the image.
 
