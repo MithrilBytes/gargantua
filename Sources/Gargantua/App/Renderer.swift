@@ -191,6 +191,32 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         }
     }
 
+    /// Switch presets live. A preset that fails the budget, or the gated max
+    /// preset without its launch flag, is refused in one sentence and the
+    /// program stays where it is.
+    private func switchPreset(_ preset: Preset) {
+        guard preset != configuration.preset else { return }
+        if preset.gated && !maxAllowed {
+            Console.line("The max preset runs only when the program is launched with --preset max. " + preset.thermalNote)
+            return
+        }
+        let next = configuration.with(preset: preset)
+        if let refusal = context.budget.refusal(bytes: next.bytes, describing: "Preset \(preset.rawValue)") {
+            Console.line(refusal)
+            return
+        }
+        recentCommandBuffers.last?.waitUntilCompleted()
+        configuration = next
+        system = ParticleSystem(context: context, count: next.particles, seed: system.seed, potential: .paczynskiWiita)
+        volume = Volume(context: context, size: next.volume)
+        marchPass.resize(width: next.marchWidth, height: next.marchHeight)
+        let clear = context.makeCommandBuffer(label: "clear volume")
+        volume.encodeClear(clear)
+        clear.commit()
+        needsSeed = true
+        Console.line("preset \(preset.rawValue): \(next.particles) particles, \(next.volume) cubed volume, \(next.marchWidth) by \(next.marchHeight) march")
+    }
+
     /// Wait for in flight work so the process exits with nothing on the queue.
     func shutdown() {
         view.isPaused = true
@@ -215,8 +241,12 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
             hudVisible.toggle()
         case .debug:
             presentPass.debugView.toggle()
-        case .presetSmall, .presetDefault, .presetMax:
-            break
+        case .presetSmall:
+            switchPreset(.small)
+        case .presetDefault:
+            switchPreset(.standard)
+        case .presetMax:
+            switchPreset(.max)
         }
     }
 
