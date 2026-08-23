@@ -133,22 +133,21 @@ enum Bench {
         formatter.dateFormat = "yyyy-MM-dd-HHmmss"
         formatter.timeZone = TimeZone(identifier: "UTC")
         let stamp = formatter.string(from: Date())
-        let report: [String: Any] = [
-            "version": Program.version,
-            "date": stamp,
-            "device": context.device.name,
-            "os": ProcessInfo.processInfo.operatingSystemVersionString,
-            "preset": configuration.preset.rawValue,
-            "particles": configuration.particles,
-            "volume": configuration.volume,
-            "march": [width, height],
-            "output": [outputWidth, outputHeight],
-            "iterations": iterations,
-            "passes": passes.mapValues { $0.json },
-            "frames": ["march_ms": marchFrame * 1000, "bake_ms": bakeFrame * 1000],
-            "bake": ["bytes": bakeBytes, "overflow_rays": bakePass.overflowCount],
-            "verdict": verdict,
-        ]
+        var report: [String: Any] = [:]
+        report["version"] = Program.version
+        report["date"] = stamp
+        report["device"] = context.device.name
+        report["os"] = ProcessInfo.processInfo.operatingSystemVersionString
+        report["preset"] = configuration.preset.rawValue
+        report["particles"] = configuration.particles
+        report["volume"] = configuration.volume
+        report["march"] = [width, height]
+        report["output"] = [outputWidth, outputHeight]
+        report["iterations"] = iterations
+        report["passes"] = passes.mapValues { $0.json }
+        report["frames"] = ["march_ms": marchFrame * 1000, "bake_ms": bakeFrame * 1000]
+        report["bake"] = ["bytes": bakeBytes, "overflow_rays": bakePass.overflowCount]
+        report["verdict"] = verdict
         let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appending(path: "bench/results")
         let url = directory.appending(path: "\(stamp).json")
         do {
