@@ -1,0 +1,7 @@
+#!/bin/sh
+# Enforces the commit title rule and rejects any body.
+dir=$(dirname "$0")
+body=$(sed -e '/^#/d' "$1" | sed '/^[[:space:]]*$/d')
+lines=$(printf '%s\n' "$body" | wc -l | tr -d ' ')
+[ "$lines" -le 1 ] || { echo "commit rejected: title only, no body" >&2; exit 1; }
+printf '%s\n' "$body" | "$dir/lint-title"

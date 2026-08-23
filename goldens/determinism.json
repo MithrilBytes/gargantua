@@ -1,0 +1,9 @@
+{
+  "name": "determinism",
+  "claim": "particle buffer checksum after 1000 steps, fixed seed",
+  "kind": "bitwise",
+  "expected": 0,
+  "tolerance": 0,
+  "method": "Seed the disk twice from the same seed, run steps substeps each time, and compare 64 bit FNV-1a checksums of the two particle buffers. Expected is the difference of the two checksums.",
+  "parameters": { "steps": 1000 }
+}
