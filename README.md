@@ -4,6 +4,8 @@ GPU particle accretion disk around a Schwarzschild black hole, rendered
 through real gravitational lensing. A native macOS program for Apple
 silicon. It opens a window, draws a black hole, and quits when you quit.
 
+![A lensed accretion disk around a black hole](docs/gargantua.jpg)
+
 It is a visualization with a physics spine, not a research instrument.
 Particles orbit and spiral inward under a pseudo Newtonian potential that
 reproduces the innermost stable circular orbit; camera rays are integrated
@@ -28,6 +30,8 @@ How that is kept true, in code:
 1. Every loop in every shader has a hard iteration cap, named in
    `Sources/Gargantua/Shaders/Constants.h` and checked by a style test.
 2. No single command buffer carries more than about 30 ms of GPU work.
+   Stills are tiled 128 pixels square, one tile per command buffer, and a
+   rebake is spread across four frames.
 3. Every command buffer's completion status is checked. On error the
    program prints one sentence and exits with code 2; nothing is resubmitted.
 4. Memory is budgeted before it is allocated: at most 40 percent of the
@@ -74,8 +78,9 @@ gargantua --preset small|default|max
 gargantua --particles N --volume 96|128|192|256 --seed S
 gargantua --strategy march|bake
 gargantua --fps-cap 30|60
+gargantua --no-upscale             present the march resolution directly
 gargantua --still out.png --width 3840 --height 2160
-gargantua bench
+gargantua bench                    time both strategies, write bench/results/<date>.json
 gargantua validate                 run the goldens on this machine's GPU
 gargantua version
 ```
@@ -90,13 +95,53 @@ golden fails.
 | ------------ | ----------------------------------------------- |
 | drag         | orbit camera                                    |
 | scroll       | dolly                                           |
-| 1 / 2 / 3    | preset small / default / max (max is gated)     |
+| 1 / 2 / 3    | preset small / default / max (max needs `--preset max` at launch) |
 | space        | pause and resume the simulation                 |
 | R            | reseed and restart the disk                     |
 | S            | screenshot to ~/Pictures/gargantua/, path printed |
 | H            | toggle hud                                      |
-| D            | debug view                                      |
+| D            | debug view: conserved quantity drift as a heat map, shaded by step count |
 | Esc or Cmd-Q | quit                                            |
+
+### Presets
+
+| Preset  | Particles | Volume | March resolution | Gate |
+| ------- | --------- | ------ | ---------------- | ---- |
+| small   | 250k      | 96^3   | 640 by 360       | none |
+| default | 1M        | 128^3  | 960 by 540       | none |
+| max     | 4M        | 256^3  | 960 by 540       | `--preset max`, prints a thermal note |
+
+## How a frame is made
+
+Four passes, one command buffer, every vsync:
+
+1. **sim**: one compute dispatch over every particle. Semi implicit Euler in
+   the Paczynski and Wiita potential with a velocity space drag, two
+   substeps per frame. Captured and escaped particles respawn in the feeding
+   annulus. No atomics, no cross thread reads, so a seed reproduces the
+   buffer bit for bit.
+2. **splat**: particles are binned into a cube of half width 30 as fixed
+   point integer atomics (blackbody weighted emission, momentum, count),
+   then resolved into half precision emission and velocity textures.
+3. **march**: one thread per ray. Each ray is a null geodesic of the
+   Schwarzschild metric in ingoing Eddington and Finkelstein coordinates,
+   reduced to its own orbital plane and integrated with fourth order Runge
+   Kutta at a step proportional to radius. Inside the disk slab it samples
+   the volume, scales emission by the redshift factor cubed, and composites
+   front to back until opaque. Escaped rays shade a procedural starfield by
+   their final direction; captured rays are black. Every ray's conserved
+   energy and angular momentum are checked against their launch values and
+   the drift is counted.
+4. **present**: MetalFX temporal upscaling from the march resolution to the
+   window (the march jitters its samples and writes depth and motion for
+   it), tone mapping with the Khronos PBR Neutral curve, the hud, vsync.
+
+Two strategies implement pass 3 behind one interface. **march** integrates
+every ray every frame. **bake** integrates each ray once for a stationary
+camera and stores up to 96 sample positions per ray (about 400 MB at 960 by
+540), after which a frame is only texture walks; moving the camera falls
+back to the march and a rebake spreads across four frames once it stops.
+`gargantua bench` times both. The default stays march.
 
 ## Units
 
@@ -107,17 +152,23 @@ disk is seeded between 6 and 24 and fed from an annulus between 20 and 24.
 
 ## Computed and stylized
 
-Computed, and held to the oracle:
+Computed, and held to the oracle by `gargantua validate`:
 
-- Particle dynamics in the Paczynski and Wiita potential, which places the
-  innermost stable orbit at r = 6 and the marginally bound orbit at r = 4.
-- The steady state inner edge of the disk, measured from the surface density
-  profile and checked by the `isco` golden on both the oracle and the GPU.
-- Bitwise determinism of the particle buffer for a fixed seed, checked by
-  the `determinism` golden. The simulation pass uses no atomics and no cross
-  thread reads; all randomness is a counter based hash of the seed.
-- The radial scaling of the thin disk temperature profile and the Planck
-  color of each temperature.
+| Golden                   | Claim                                                   | Bar          |
+| ------------------------ | ------------------------------------------------------- | ------------ |
+| isco                     | steady state surface density inner edge sits at r = 6   | 5 percent    |
+| determinism              | particle buffer checksum after 1000 steps, fixed seed   | bitwise      |
+| shadow                   | bisected capture boundary sits at b_c = 5.196           | 1 percent    |
+| deflection               | bending at b = 1000 matches 4/b                         | 0.5 percent  |
+| conservation_interactive | per ray E and L relative drift, 256 step interactive    | under 1e-4   |
+| conservation_still       | per ray E and L relative drift, 4096 step still         | under 1e-5   |
+| parity                   | GPU geodesic endpoints vs oracle, 64 sampled rays       | under 1e-3   |
+| beaming                  | approaching to receding brightness ratio vs oracle render | 10 percent |
+
+The goldens are data in `goldens/`; `swift test` holds the oracle to the
+same files and `validate` holds the GPU to them. The splat pass is excluded
+from the determinism golden because atomic accumulation order is not
+deterministic.
 
 Stylized, by design and named as such in `Sources/Oracle/Constants.swift`:
 
@@ -125,12 +176,74 @@ Stylized, by design and named as such in `Sources/Oracle/Constants.swift`:
   in X rays, which a monitor cannot show.
 - `ZERO_TORQUE_FLOOR`, a floor on the zero torque factor so gas inside the
   innermost stable orbit stays visible while it plunges.
+- `GAS_SPEED_CEILING`: the simulated velocity stands in for the velocity a
+  static observer measures when computing Doppler beaming, after a smooth
+  compression below c, because pseudo Newtonian orbits exceed c inside r of
+  about 4. The innermost stable orbit speed 0.61 maps to 0.52, close to the
+  Schwarzschild value 0.5.
 - `DRAG_ALPHA`, `FEED_VELOCITY_DISPERSION` and `DISK_ASPECT`, which set the
   inflow rate, the orbital dispersion and the disk thickness.
-- `SPRITE_RADIUS` and `EXPOSURE_DEFAULT`, which set the look of the image.
+- `EMISSION_SCALE`, `VOLUME_OPACITY`, `STAR_BRIGHTNESS` and
+  `EXPOSURE_DEFAULT`, which set the look of the image.
 
 Every constant carries its source. Hardware figures carry the date they
 were read.
+
+## Performance
+
+`gargantua bench` on an M1 Pro with a 16 core GPU, default preset, 960 by
+540 march, 1920 by 1080 output, 30 iterations per pass:
+
+| Pass    | ms    | Spec budget on a base M1 |
+| ------- | ----- | ------------------------ |
+| sim     | 0.35  | 1.5                      |
+| splat   | 4.4   | 2.0                      |
+| march   | 31.8  | 8.0                      |
+| walk    | 2.4   |                          |
+| bake    | 33.9 once per camera stop |              |
+| upscale | 1.2   | 1.5 with present         |
+| present | 0.1   |                          |
+
+A march frame is 38 ms and a walked frame 8 ms on this machine; the base M1
+has half the GPU cores. The march line is the one the optimization campaign
+attacks next; the lanes and their measurements land as dated writeups in
+`docs/lab/`. Reports from `bench` are committed in `bench/results/`
+alongside the change they measure, and a regression is caught by reading
+two files side by side.
+
+## Known limits
+
+The GPU is fp32 only. The mitigations are unit scaling near one, horizon
+regular coordinates, and monitored conserved quantities. Measured on this
+machine, a 4096 step fp32 integration drifts by 2.3e-6 relative, and the
+oracle's own double precision run under the same step policy drifts by
+2e-7, so the step policy, not the precision, sets the floor.
+
+Under the interactive policy the 256 step cap is reached by rays that pass
+near the hole, about a fifth of the default view. Their fate is still exact
+(moving inward with impact parameter below 3 sqrt(3) means capture), the
+sky is shaded along their last direction, and the count is shown in the hud
+and in `validate`.
+
+The disk is particles with drag, not fluid. No pressure, no magnetic
+fields, no turbulence. It looks like an accretion disk; it is not a
+simulation of one.
+
+MetalFX temporal upscaling can ghost during fast camera moves, since motion
+vectors come from straight line reprojection of lensed rays.
+`--no-upscale` renders the march resolution natively for clean captures.
+
+The bake stores samples at least half a voxel apart, so a walked frame is
+an approximation of a marched one, and rays that need more than 96 samples
+lose their tail; `bench` reports how many.
+
+Lensing is applied to the volume and the background, not particle by
+particle; two images of the same particle come from the ray crossing the
+volume twice, which is correct in aggregate and approximate per particle.
+
+Fanless machines throttle under the max preset within minutes. The program
+remains correct and smooth at whatever clock the OS grants; the fps counter
+is the thermometer.
 
 ## Checks
 
@@ -159,7 +272,9 @@ make hooks
 installs the commit hooks that enforce the commit title rule and the dash
 rule. `make check` runs the tests, the dash scan and the commit title lint.
 `make constants` regenerates the Metal constants header from the Swift
-source of truth; a style test fails if the two drift.
+source of truth; a style test fails if the two drift. `swift test -c
+release` runs the suite in well under a second; the debug build takes about
+half a minute because the oracle steps 36 million particles.
 
 The soak harness runs the window for a fixed time, prints a frame timing
 summary, writes a screenshot, and quits through the path you choose so all
@@ -176,17 +291,19 @@ bound figures here are roughly twice as optimistic as that target.
 ## Repository layout
 
 ```
-Sources/Gargantua/          host: app, camera, passes, budget checks, validation
-Sources/Gargantua/Shaders/  sim.metal, sprites.metal, present.metal, Constants.h
-Sources/Oracle/             double precision reference, no Metal imports
-Sources/ShaderTypes/        the C header shared by Swift and Metal
-Sources/EmbedResourcesTool/ build tool that embeds shaders and goldens
-Plugins/EmbedResources/     the SwiftPM build tool plugin that runs it
-Tests/OracleTests/          oracle unit tests, analytic checks, goldens
-Tests/StyleTests/           repository rule enforcement
-goldens/                    expected values and tolerances as data
-Makefile                    make app, make check, make constants, make hooks
-LICENSE                     MIT
+Sources/Gargantua/            host: app, camera, passes, budget checks, validation, bench, stills
+Sources/Gargantua/Shaders/    sim, splat, march, bake, present kernels, Geodesic.h, Constants.h
+Sources/Oracle/               double precision reference, no Metal imports
+Sources/ShaderTypes/          the C header shared by Swift and Metal
+Sources/EmbedResourcesTool/   build tool that embeds shaders and goldens
+Plugins/EmbedResources/       the SwiftPM build tool plugin that runs it
+Tests/OracleTests/            oracle unit tests, analytic checks, goldens
+Tests/StyleTests/             repository rule enforcement
+goldens/                      expected values and tolerances as data
+bench/results/                dated JSON benchmark records
+docs/lab/                     optimization campaign writeups, numbered
+Makefile                      make app, make check, make constants, make hooks
+LICENSE                       MIT
 ```
 
 ## References
@@ -205,24 +322,31 @@ LICENSE                     MIT
 6. Luminet, J.-P., 1979. Image of a spherical black hole with thin
    accretion disk. A&A 75, 228.
 7. Pringle, J. E., 1981. Accretion discs in astrophysics. ARA&A 19, 137.
-8. Hairer, E., Lubich, C. and Wanner, G., 2006. Geometric Numerical
+8. James, O., von Tunzelmann, E., Franklin, P. and Thorne, K. S., 2015.
+   Gravitational lensing by spinning black holes in astrophysics, and in
+   the movie Interstellar. Classical and Quantum Gravity 32, 065001.
+9. Hairer, E., Lubich, C. and Wanner, G., 2006. Geometric Numerical
    Integration, 2nd ed. Springer.
-9. Jarzynski, M. and Olano, M., 2020. Hash functions for GPU rendering.
-   Journal of Computer Graphics Techniques 9(3), 20.
-10. Box, G. E. P. and Muller, M. E., 1958. A note on the generation of
+10. Jarzynski, M. and Olano, M., 2020. Hash functions for GPU rendering.
+    Journal of Computer Graphics Techniques 9(3), 20.
+11. Box, G. E. P. and Muller, M. E., 1958. A note on the generation of
     random normal deviates. Annals of Mathematical Statistics 29, 610.
-11. Wyman, C., Sloan, P.-P. and Shirley, P., 2013. Simple analytic
+12. Halton, J. H., 1960. On the efficiency of certain quasi random
+    sequences of points in evaluating multi dimensional integrals.
+    Numerische Mathematik 2, 84.
+13. Wyman, C., Sloan, P.-P. and Shirley, P., 2013. Simple analytic
     approximations to the CIE XYZ color matching functions. Journal of
     Computer Graphics Techniques 2(2), 1.
-12. Tiesinga, E., Mohr, P. J., Newell, D. B. and Taylor, B. N., 2021.
+14. Tiesinga, E., Mohr, P. J., Newell, D. B. and Taylor, B. N., 2021.
     CODATA recommended values of the fundamental physical constants: 2018.
     Reviews of Modern Physics 93, 025010.
-13. IEC 61966-2-1:1999. Default RGB colour space, sRGB.
-14. Khronos Group, 2024. PBR Neutral Tone Mapper Specification.
+15. IEC 61966-2-1:1999. Default RGB colour space, sRGB.
+16. ITU-R BT.709-6, 2015. Parameter values for the HDTV standards for
+    production and international programme exchange.
+17. Khronos Group, 2024. PBR Neutral Tone Mapper Specification.
     github.com/KhronosGroup/ToneMapping, read 2026-08-22.
-15. James, O., von Tunzelmann, E., Franklin, P. and Thorne, K. S., 2015.
-    Gravitational lensing by spinning black holes in astrophysics, and in
-    the movie Interstellar. Classical and Quantum Gravity 32, 065001.
+18. Fowler, G., Noll, L. C. and Vo, K.-P., 1991. FNV hash.
+    www.isthe.com/chongo/tech/comp/fnv.
 
 ## License
 
