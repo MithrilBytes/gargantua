@@ -48,6 +48,11 @@ struct Options: Sendable {
     var quitPath: QuitPath = .direct
     /// Development harness: make `bench` table step policies and threadgroup sizes.
     var sweep = false
+    /// With --still: also render this many consecutive native frames with the
+    /// simulation advancing, for temporal artifact hunting.
+    var sequence: Int?
+    /// Starting camera as azimuth, elevation, distance.
+    var camera: (azimuth: Double, elevation: Double, distance: Double)?
 
     static let usage = """
     usage: gargantua [--preset small|default|max] [--particles N] [--volume 96|128|192|256] [--seed S] \
@@ -108,6 +113,14 @@ struct Options: Sendable {
                     guard let seconds = Double(text), seconds > 0 else { throw UsageError(sentence: "soak needs a positive number of seconds.") }
                     options.soakSeconds = seconds
                 case "--sweep": options.sweep = true
+                case "--sequence": options.sequence = try integer(for: argument)
+                case "--camera":
+                    let text = try value(for: argument)
+                    let parts = text.split(separator: ",").compactMap { Double($0) }
+                    guard parts.count == 3, parts[2] > 2.5, parts[2] < 60 else {
+                        throw UsageError(sentence: "camera needs azimuth,elevation,distance with distance between 2.5 and 60.")
+                    }
+                    options.camera = (parts[0], parts[1], parts[2])
                 case "--quit":
                     let name = try value(for: argument)
                     guard let path = QuitPath(rawValue: name) else { throw UsageError(sentence: "unknown quit path \(name); choose direct, esc or cmd-q.") }

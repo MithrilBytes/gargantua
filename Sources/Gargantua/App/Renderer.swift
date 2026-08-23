@@ -30,7 +30,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
     private let capture: Capture
     private let hudRenderer: HudRenderer
     private var system: ParticleSystem
-    private var camera = OrbitCamera()
+    private var camera: OrbitCamera
     private var stats = FrameStats()
     private var paused = false
     private var hudVisible = true
@@ -48,6 +48,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         self.context = context
         self.view = view
         configuration = Configuration.make(options)
+        camera = OrbitCamera.from(options)
         maxAllowed = configuration.preset == .max
         quitPath = options.quitPath
         upscaleWanted = options.upscale
