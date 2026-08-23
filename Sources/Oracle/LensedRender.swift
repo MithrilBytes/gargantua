@@ -50,7 +50,7 @@ public enum LensedRender {
         var transmittance = 1.0
         var previous = ray.position
         for _ in 0..<settings.stepCap {
-            ray.state = Schwarzschild.step(ray.state, h: settings.stepLength(at: ray.state.r))
+            ray.state = Schwarzschild.step(ray.state, h: settings.stepLength(at: ray.state.r, z: previous.z))
             let position = ray.position
             if ray.state.r <= settings.captureRadius { break }
             if abs(position.z) < shading.slabHalfHeight,

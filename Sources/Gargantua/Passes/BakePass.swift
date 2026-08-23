@@ -70,7 +70,7 @@ final class BakePass {
         encoder.setBytes(&uniforms, length: MemoryLayout<MarchUniforms>.stride, index: 2)
         encoder.setBuffer(overflow, offset: 0, index: 3)
         tables.bind(encoder)
-        encoder.dispatchThreads(MTLSize(width: width, height: rows, depth: 1), threadsPerThreadgroup: MTLSize(width: 32, height: 4, depth: 1))
+        encoder.dispatchThreads(MTLSize(width: width, height: rows, depth: 1), threadsPerThreadgroup: MarchPass.defaultThreadgroup)
         encoder.endEncoding()
         bakedRows += rows
     }
@@ -97,7 +97,7 @@ final class BakePass {
         encoder.setBuffer(samples, offset: 0, index: 0)
         encoder.setBuffer(headers, offset: 0, index: 1)
         encoder.setBytes(&u, length: MemoryLayout<MarchUniforms>.stride, index: 2)
-        encoder.dispatchThreads(MTLSize(width: width, height: height, depth: 1), threadsPerThreadgroup: MTLSize(width: 32, height: 4, depth: 1))
+        encoder.dispatchThreads(MTLSize(width: width, height: height, depth: 1), threadsPerThreadgroup: MarchPass.defaultThreadgroup)
         encoder.endEncoding()
     }
 }

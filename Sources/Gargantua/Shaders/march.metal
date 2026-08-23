@@ -63,7 +63,7 @@ static MarchResult marchRay(PlaneRay launched, constant MarchUniforms& u, bool g
     float depthWeight = 0.0f;
     for (uint k = 0u; k < STEP_CAP_STILL; ++k) {
         if (k >= u.geodesic.stepCap) break;
-        float h = rayStepLength(ray.s.r, u.geodesic);
+        float h = rayStepLength(previous, ray.s.r, u.geodesic);
         RayState before = ray.s;
         ray.s = rayStep(ray.s, h);
         steps = k + 1u;

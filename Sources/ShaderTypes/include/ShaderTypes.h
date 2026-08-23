@@ -64,8 +64,9 @@ typedef struct {
     float captureRadius;
     float escapeRadius;
     unsigned int stepCap;
-    float padding0;
-    float padding1;
+    /// Step policy while the ray is too far from the disk slab to sample anything.
+    float emptyStepFactor;
+    float emptyStepMax;
 } GeodesicSettings;
 
 enum {

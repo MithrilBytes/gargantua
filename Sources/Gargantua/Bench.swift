@@ -1,6 +1,7 @@
 import Foundation
 import Metal
 import Oracle
+import ShaderTypes
 
 /// `gargantua bench`: times every pass for both strategies on the same
 /// scene, prints a verdict and writes a dated JSON report. Each timing is
@@ -28,6 +29,94 @@ enum Bench {
     static let outputHeight = 1080
     static let warmup = 5
     static let iterations = 30
+
+    /// One command buffer per iteration, waited to completion, GPU time only.
+    static func time(context: GpuContext, iterations count: Int = iterations, _ encode: (MTLCommandBuffer) -> Void) -> Timing {
+        var samples: [Double] = []
+        for i in 0..<(warmup + count) {
+            let commandBuffer = context.makeCommandBuffer(label: "bench")
+            encode(commandBuffer)
+            commandBuffer.commit()
+            commandBuffer.waitUntilCompleted()
+            if i >= warmup { samples.append(commandBuffer.gpuEndTime - commandBuffer.gpuStartTime) }
+        }
+        return Timing(samples)
+    }
+
+    /// `bench --sweep`: the step policy and threadgroup experiments behind
+    /// the campaign writeups. Each policy is timed on the march and judged
+    /// on conserved quantity drift over a grid of camera rays.
+    static func sweep(context: GpuContext, marchPass: MarchPass, volume: Volume, system: ParticleSystem, targets: MarchPass.Targets,
+                      camera: OrbitCamera, width: Int, height: Int, seed: UInt64) -> Never {
+        let probes = Probes(context: context, marchPass: marchPass, volume: volume, blackbody: system.blackbody)
+        let cap = Int(Constants.stepCapInteractive.value)
+        func policy(_ name: String, factor: Double, min: Double, max: Double, emptyFactor: Double? = nil, emptyMax: Double? = nil) -> (String, Schwarzschild.Settings) {
+            (name, Schwarzschild.Settings(stepFactor: factor, stepMin: min, stepMax: max, stepCap: cap, emptyStepFactor: emptyFactor, emptyStepMax: emptyMax))
+        }
+        let voxel = 2.0 * Constants.volumeHalfExtent.value / Double(volume.size)
+        let policies = [
+            policy("fixed 0.25", factor: 1e9, min: 0.25, max: 0.25),
+            policy("fixed 0.5", factor: 1e9, min: 0.5, max: 0.5),
+            policy("prop 0.02 max 0.5 (spec)", factor: 0.02, min: 0.02, max: 0.5),
+            policy("prop 0.03 max 0.5", factor: 0.03, min: 0.02, max: 0.5),
+            policy("prop 0.04 max 0.5", factor: 0.04, min: 0.02, max: 0.5),
+            policy("prop 0.05 max 1.0", factor: 0.05, min: 0.02, max: 1.0),
+            policy("prop 0.02, empty 0.06 max 1.5", factor: 0.02, min: 0.02, max: 0.5, emptyFactor: 0.06, emptyMax: 1.5),
+            policy("prop 0.02, empty 0.1 max 3.0", factor: 0.02, min: 0.02, max: 0.5, emptyFactor: 0.1, emptyMax: 3.0),
+            policy("prop 0.02, empty 0.15 max 4.0", factor: 0.02, min: 0.02, max: 0.5, emptyFactor: 0.15, emptyMax: 4.0),
+            policy("prop 0.02, empty 0.2 max 6.0", factor: 0.02, min: 0.02, max: 0.5, emptyFactor: 0.2, emptyMax: 6.0),
+            policy("prop 0.04, empty 0.08 max 2.0", factor: 0.04, min: 0.02, max: 0.5, emptyFactor: 0.08, emptyMax: 2.0),
+            policy("prop 0.04 max voxel, empty 0.1 max 3", factor: 0.04, min: 0.02, max: voxel, emptyFactor: 0.1, emptyMax: 3.0),
+            policy("prop 0.05 max voxel, empty 0.1 max 3", factor: 0.05, min: 0.02, max: voxel, emptyFactor: 0.1, emptyMax: 3.0),
+            policy("prop 0.05 max 1.0, empty 0.1 max 3", factor: 0.05, min: 0.02, max: 1.0, emptyFactor: 0.1, emptyMax: 3.0),
+            policy("prop 0.06 max 1.0, empty 0.12 max 3", factor: 0.06, min: 0.02, max: 1.0, emptyFactor: 0.12, emptyMax: 3.0),
+        ]
+        let launches = Probes.cameraGrid(camera: camera, columns: 32, rows: 32, aspect: Double(width) / Double(height))
+        func render(_ settings: Schwarzschild.Settings) -> [Double] {
+            let uniforms = MarchPass.uniforms(camera: camera, width: width, height: height, settings: settings,
+                                              driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
+                                              starSeed: UInt32(truncatingIfNeeded: seed), stars: false, tables: marchPass.tables)
+            let commandBuffer = context.makeCommandBuffer(label: "sweep render")
+            marchPass.encodeImage(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody, targets: targets, counters: nil)
+            commandBuffer.commit()
+            commandBuffer.waitUntilCompleted()
+            return Validate.readImage(targets.output, context: context).map(LensedRender.luminance)
+        }
+        let reference = render(policies[2].1)
+        Console.line("step policy sweep: 15 march iterations each, drift over \(launches.count) camera rays at the \(cap) step cap, image difference from the spec policy without stars")
+        Console.line(Validate.pad("policy", 38) + "  march ms  max drift  p99 drift  exhausted  image diff")
+        for (name, settings) in policies {
+            let uniforms = MarchPass.uniforms(camera: camera, width: width, height: height, settings: settings,
+                                              driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
+                                              starSeed: UInt32(truncatingIfNeeded: seed), tables: marchPass.tables)
+            let timing = Bench.time(context: context, iterations: 15) {
+                marchPass.encodeImage($0, uniforms: uniforms, volume: volume, blackbody: system.blackbody, targets: targets, counters: nil)
+            }
+            let results = probes.run(launches, settings: settings, jump: true)
+            let drifts = results.map { Double($0.drift) }.sorted()
+            let exhausted = results.filter { $0.outcome == RayExhausted }.count
+            let p99 = drifts[min(Int(Double(drifts.count - 1) * 0.99), drifts.count - 1)]
+            let image = render(settings)
+            var difference = 0.0, total = 0.0
+            for (a, b) in zip(reference, image) {
+                difference += abs(a - b)
+                total += a
+            }
+            Console.line(Validate.pad(name, 38) + String(format: "  %8.2f  %9.2e  %9.2e  %9d  %9.2e", timing.mean * 1000, drifts.last ?? 0, p99, exhausted, difference / total))
+        }
+        Console.line("threadgroup sweep at the spec policy")
+        let spec = MarchPass.uniforms(camera: camera, width: width, height: height, settings: .interactive,
+                                      driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
+                                      starSeed: UInt32(truncatingIfNeeded: seed), tables: marchPass.tables)
+        for (w, h) in [(32, 4), (16, 8), (16, 16), (8, 8), (16, 4), (8, 4), (8, 16), (4, 8), (4, 16)] {
+            let timing = Bench.time(context: context, iterations: 15) {
+                marchPass.encodeImage($0, uniforms: spec, volume: volume, blackbody: system.blackbody, targets: targets, counters: nil,
+                                      threadgroup: MTLSize(width: w, height: h, depth: 1))
+            }
+            Console.line(String(format: "%3d by %2d  march %7.2f ms", w, h, timing.mean * 1000))
+        }
+        exit(0)
+    }
 
     static func run(_ options: Options) -> Never {
         let context = GpuContext()
@@ -74,17 +163,18 @@ enum Bench {
         bakeUniforms.geodesic = MarchPass.settings(.still)
 
         func time(_ label: String, _ encode: (MTLCommandBuffer) -> Void) -> Timing {
-            var samples: [Double] = []
-            for i in 0..<(warmup + iterations) {
-                let commandBuffer = context.makeCommandBuffer(label: "bench \(label)")
-                encode(commandBuffer)
-                commandBuffer.commit()
-                commandBuffer.waitUntilCompleted()
-                if i >= warmup { samples.append(commandBuffer.gpuEndTime - commandBuffer.gpuStartTime) }
-            }
-            let timing = Timing(samples)
+            let timing = Bench.time(context: context, encode)
             Console.line(String(format: "%-8@ mean %7.3f ms  p50 %7.3f ms  max %7.3f ms", label, timing.mean * 1000, timing.median * 1000, timing.maximum * 1000))
             return timing
+        }
+
+        if options.sweep {
+            let splat = context.makeCommandBuffer(label: "sweep splat")
+            splatPass.encode(splat, system: system, volume: volume)
+            splat.commit()
+            splat.waitUntilCompleted()
+            sweep(context: context, marchPass: marchPass, volume: volume, system: system, targets: targets, camera: camera,
+                  width: width, height: height, seed: configuration.seed)
         }
 
         Console.line("timing \(iterations) iterations per pass after \(warmup) warmups, \(width) by \(height) march, \(outputWidth) by \(outputHeight) output")

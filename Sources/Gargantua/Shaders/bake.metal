@@ -53,7 +53,7 @@ kernel void bakeRays(device half4* samples [[buffer(0)]],
     bool leftSphere = false;
     for (uint k = 0u; k < STEP_CAP_STILL; ++k) {
         if (k >= u.geodesic.stepCap) break;
-        float h = rayStepLength(ray.s.r, u.geodesic);
+        float h = rayStepLength(previous, ray.s.r, u.geodesic);
         RayState before = ray.s;
         ray.s = rayStep(ray.s, h);
         if (u.sphereRadius > 0.0f && ray.s.r >= u.sphereRadius && ray.s.rDot > 0.0f && before.r < u.sphereRadius) {

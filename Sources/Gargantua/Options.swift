@@ -46,6 +46,8 @@ struct Options: Sendable {
     /// frame time summary and a screenshot path, then quit.
     var soakSeconds: Double?
     var quitPath: QuitPath = .direct
+    /// Development harness: make `bench` table step policies and threadgroup sizes.
+    var sweep = false
 
     static let usage = """
     usage: gargantua [--preset small|default|max] [--particles N] [--volume 96|128|192|256] [--seed S] \
@@ -105,6 +107,7 @@ struct Options: Sendable {
                     let text = try value(for: argument)
                     guard let seconds = Double(text), seconds > 0 else { throw UsageError(sentence: "soak needs a positive number of seconds.") }
                     options.soakSeconds = seconds
+                case "--sweep": options.sweep = true
                 case "--quit":
                     let name = try value(for: argument)
                     guard let path = QuitPath(rawValue: name) else { throw UsageError(sentence: "unknown quit path \(name); choose direct, esc or cmd-q.") }

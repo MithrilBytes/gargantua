@@ -171,7 +171,12 @@ static inline float3 sphereExitDirection(PlaneRay ray, constant MarchUniforms& u
     return asymptoticDirection(ray, ray.s.phi + sweep);
 }
 
-static inline float rayStepLength(float r, GeodesicSettings g) {
+// Step length for the next step. A ray farther from the disk slab than the
+// coarse step it is about to take cannot land inside the slab, and there is
+// nothing to sample where it is, so the coarser policy applies there.
+static inline float rayStepLength(float3 position, float r, GeodesicSettings g) {
+    float coarse = clamp(g.emptyStepFactor * r, g.stepMin, g.emptyStepMax);
+    if (abs(position.z) > DISK_SLAB_HALF_HEIGHT + coarse) return coarse;
     return clamp(g.stepFactor * r, g.stepMin, g.stepMax);
 }
 

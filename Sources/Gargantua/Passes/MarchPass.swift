@@ -61,7 +61,7 @@ final class MarchPass {
     static func settings(_ s: Schwarzschild.Settings) -> GeodesicSettings {
         GeodesicSettings(stepFactor: Float(s.stepFactor), stepMin: Float(s.stepMin), stepMax: Float(min(s.stepMax, 1e9)),
                          captureRadius: Float(s.captureRadius), escapeRadius: Float(s.escapeRadius),
-                         stepCap: UInt32(s.stepCap), padding0: 0, padding1: 0)
+                         stepCap: UInt32(s.stepCap), emptyStepFactor: Float(s.emptyStepFactor), emptyStepMax: Float(min(s.emptyStepMax, 1e9)))
     }
 
     static func uniforms(camera: OrbitCamera, previous: OrbitCamera? = nil, jitter: SIMD2<Float> = SIMD2(0, 0),
@@ -101,8 +101,10 @@ final class MarchPass {
     }
 
     /// Render a tile (or the whole image when the targets cover it).
+    static let defaultThreadgroup = MTLSize(width: Int(Constants.marchThreadgroupWidth.value), height: Int(Constants.marchThreadgroupHeight.value), depth: 1)
+
     func encodeImage(_ commandBuffer: MTLCommandBuffer, uniforms: MarchUniforms, volume: Volume, blackbody: MTLTexture,
-                     targets: Targets, counters: MTLBuffer?) {
+                     targets: Targets, counters: MTLBuffer?, threadgroup: MTLSize = MarchPass.defaultThreadgroup) {
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
             Exit.operational("Metal could not create the march encoder.")
         }
@@ -120,7 +122,7 @@ final class MarchPass {
         encoder.setBytes(&u, length: MemoryLayout<MarchUniforms>.stride, index: 0)
         encoder.setBuffer(counters ?? self.counters[0], offset: 0, index: 1)
         encoder.dispatchThreads(MTLSize(width: targets.output.width, height: targets.output.height, depth: 1),
-                                threadsPerThreadgroup: MTLSize(width: 32, height: 4, depth: 1))
+                                threadsPerThreadgroup: threadgroup)
         encoder.endEncoding()
     }
 
