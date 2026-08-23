@@ -229,9 +229,12 @@ public enum Schwarzschild {
     /// after a smooth compression below c. Mirrors march.metal.
     public static func redshiftFactor(radius r: Double, direction: SIMD3<Double>, gas: SIMD3<Double>) -> Double {
         let ceiling = Constants.gasSpeedCeiling.value
-        let speed = (gas * gas).sum().squareRoot()
+        // Capped like the kernel so the two sides stay identical; fp32 tanh
+        // on the GPU overflows for arguments beyond about 44.
+        let magnitude = (gas * gas).sum().squareRoot()
+        let speed = min(magnitude, 8.0)
         let beta = speed > 0 ? ceiling * tanh(speed / ceiling) : 0.0
-        let velocity = speed > 0 ? gas * (beta / speed) : SIMD3(repeating: 0.0)
+        let velocity = magnitude > 0 ? gas * (beta / magnitude) : SIMD3(repeating: 0.0)
         let gamma = 1.0 / (1.0 - beta * beta).squareRoot()
         return max(f(r), 0.0).squareRoot() / (gamma * (1.0 + (direction * velocity).sum()))
     }

@@ -95,5 +95,9 @@ enum SyntheticDisk {
         let ceiling = Constants.gasSpeedCeiling.value
         let fast = Schwarzschild.redshiftFactor(radius: 1e6, direction: SIMD3(1.0, 0.0, 0.0), gas: SIMD3(-5.0, 0.0, 0.0))
         #expect(fast < (1.0 + ceiling) / (1.0 - ceiling).squareRoot() * 1.0001 && fast.isFinite)
+        // Plunge speeds near the capture radius reach tens of c; the factor
+        // must stay finite there on both sides (fp32 tanh overflows near 44).
+        let plunge = Schwarzschild.redshiftFactor(radius: 2.05, direction: SIMD3(0.0, 1.0, 0.0), gas: SIMD3(0.0, -89.0, 0.0))
+        #expect(plunge.isFinite && plunge > 0.0)
     }
 }
