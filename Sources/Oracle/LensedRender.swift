@@ -50,7 +50,7 @@ public enum LensedRender {
         var transmittance = 1.0
         var previous = ray.position
         for _ in 0..<settings.stepCap {
-            ray.state = Schwarzschild.step(ray.state, h: settings.stepLength(at: ray.state.r))
+            ray.state = Schwarzschild.step(ray.state, h: settings.stepLength(at: ray.state.r, z: previous.z))
             let position = ray.position
             if ray.state.r <= settings.captureRadius { break }
             if abs(position.z) < shading.slabHalfHeight,
@@ -62,7 +62,9 @@ public enum LensedRender {
                     var g3 = 1.0
                     if shading.redshift {
                         let g = Schwarzschild.redshiftFactor(radius: ray.state.r, direction: ray.direction, gas: s.velocity)
-                        g3 = g * g * g
+                        let gravity = max(Schwarzschild.f(ray.state.r), 0.0).squareRoot()
+                        let bulk = min(s.density / Constants.beamingDensityFloor.value, 1.0)
+                        g3 = gravity * gravity * gravity * (1.0 - bulk) + g * g * g * bulk
                     }
                     let alpha = 1.0 - exp(-shading.opacity * s.density * pathLength)
                     color += transmittance * s.emission * g3 * pathLength

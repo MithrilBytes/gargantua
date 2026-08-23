@@ -132,6 +132,11 @@ public enum Constants {
         source: design,
         note: "Velocity space drag rate as a fraction of the local circular angular frequency; stands in for viscosity and drives the inward spiral.")
 
+    public static let plungeSpeedLimit = Constant<Double>(
+        "PLUNGE_SPEED_LIMIT", 12.0,
+        source: design,
+        note: "No bound orbit in the Paczynski and Wiita potential moves faster than free fall from rest at infinity to the capture radius, sqrt(2 / (R_CAPTURE - 2)) = 10; anything beyond this margin is a particle the integrator kicked across the capture sphere in one step, and it is treated as captured.")
+
     public static let feedVelocityDispersion = Constant<Double>(
         "FEED_VELOCITY_DISPERSION", 0.02,
         source: design,
@@ -164,6 +169,11 @@ public enum Constants {
         source: design,
         note: "Highest temperature in the blackbody color table, kelvin.")
 
+    public static let cicCorners = Constant<UInt32>(
+        "CIC_CORNERS", 8,
+        source: "Hockney, R. W. and Eastwood, J. W., 1988. Computer Simulation Using Particles. Taylor and Francis, ch. 5 (cloud in cell weighting).",
+        note: "Corners of the trilinear cloud in cell deposit. Interactive frames choose one corner per particle with the trilinear weights as probabilities, an unbiased estimate whose expectation is the exact deposit; stills deposit into all eight.")
+
     public static let blackbodyTableSize = Constant<UInt32>(
         "BLACKBODY_TABLE_SIZE", 256,
         source: design,
@@ -187,7 +197,37 @@ public enum Constants {
         note: "Affine step length is this fraction of the radius, clamped between STEP_MIN and STEP_MAX.")
 
     public static let stepMin = Constant<Double>("STEP_MIN", 0.02, source: design, note: "Smallest affine step.")
-    public static let stepMax = Constant<Double>("STEP_MAX", 0.5, source: design, note: "Largest affine step.")
+    public static let stepMax = Constant<Double>("STEP_MAX", 0.5, source: design, note: "Largest affine step while a ray is near the disk slab, about one voxel of the default volume, so the gather resolves it.")
+
+    public static let emptyStepFactorInteractive = Constant<Double>(
+        "STEP_FACTOR_EMPTY_INTERACTIVE", 0.1,
+        source: design,
+        note: "Interactive step factor while a ray is farther from the disk slab than the step it would take; nothing can be sampled there and fourth order accuracy allows it. Chosen from the docs/lab/02 sweep: E and L drift 1.5e-5 against the 1e-4 interactive budget, image difference 1.2e-3.")
+
+    public static let emptyStepMaxInteractive = Constant<Double>(
+        "STEP_MAX_EMPTY_INTERACTIVE", 3.0,
+        source: design,
+        note: "Largest interactive step away from the slab, from the docs/lab/02 sweep.")
+
+    public static let emptyStepFactorStill = Constant<Double>(
+        "STEP_FACTOR_EMPTY_STILL", 0.06,
+        source: design,
+        note: "Still render step factor away from the slab; gentler than interactive so the drift stays under the tighter 1e-5 still budget (measured 3e-6 in the docs/lab/02 sweep).")
+
+    public static let emptyStepMaxStill = Constant<Double>(
+        "STEP_MAX_EMPTY_STILL", 1.5,
+        source: design,
+        note: "Largest still render step away from the slab, from the docs/lab/02 sweep.")
+
+    public static let marchThreadgroupWidth = Constant<UInt32>(
+        "MARCH_THREADGROUP_WIDTH", 8,
+        source: design,
+        note: "Threadgroup shape for the ray kernels; 8 by 8 measured 10 percent faster than the previous 32 by 4 in the docs/lab/03 sweep.")
+
+    public static let marchThreadgroupHeight = Constant<UInt32>(
+        "MARCH_THREADGROUP_HEIGHT", 8,
+        source: design,
+        note: "See MARCH_THREADGROUP_WIDTH.")
 
     public static let bakeSamples = Constant<UInt32>(
         "BAKE_SAMPLES", 96,
@@ -236,6 +276,11 @@ public enum Constants {
         source: design,
         note: "Stylized. The simulated gas speed is compressed to beta = ceiling tanh(v / ceiling) before the Doppler factor, since pseudo Newtonian orbits exceed c inside r of about 4; the innermost stable orbit speed 0.61 maps to 0.52, close to the Schwarzschild value 0.5.")
 
+    public static let beamingDensityFloor = Constant<Double>(
+        "BEAMING_DENSITY_FLOOR", 40.0,
+        source: design,
+        note: "Stylized. Doppler beaming blends in with min(density / floor, 1); below it only the gravitational redshift applies. A voxel holding one or two particles has no meaningful bulk velocity, and beaming it fully makes each plunging particle strobe as its velocity sweeps the camera direction. Forty per cubic M is about four particles in a default voxel.")
+
     public static let volumeOpacity = Constant<Double>(
         "VOLUME_OPACITY", 0.0005,
         source: design,
@@ -277,11 +322,13 @@ public enum Constants {
     public static let all: [any ConstantEntry] = [
         schwarzschildRadius, photonSphere, isco, marginallyBound, criticalImpactParameter, weakDeflectionCoefficient,
         captureRadius, escapeRadius, diskOuterRadius, feedInnerRadius, diskSlabHalfHeight, volumeHalfExtent,
-        simulationTimestep, simulationSubsteps, dragAlpha, feedVelocityDispersion, diskAspectRatio,
-        peakTemperature, zeroTorqueFloor, blackbodyMinTemperature, blackbodyMaxTemperature, blackbodyTableSize,
-        stepCapInteractive, stepCapStill, stepRadiusFactor, stepMin, stepMax, bakeSamples, bakeSpacingVoxels, bakeFrames, sweepTableSize,
+        simulationTimestep, simulationSubsteps, dragAlpha, plungeSpeedLimit, feedVelocityDispersion, diskAspectRatio,
+        peakTemperature, zeroTorqueFloor, cicCorners, blackbodyMinTemperature, blackbodyMaxTemperature, blackbodyTableSize,
+        stepCapInteractive, stepCapStill, stepRadiusFactor, stepMin, stepMax,
+        emptyStepFactorInteractive, emptyStepMaxInteractive, emptyStepFactorStill, emptyStepMaxStill,
+        marchThreadgroupWidth, marchThreadgroupHeight, bakeSamples, bakeSpacingVoxels, bakeFrames, sweepTableSize,
         driftBudgetInteractive, driftBudgetStill,
-        exposure, emissionScale, gasSpeedCeiling, volumeOpacity, starBrightness, stillSettleSteps, stillTile,
+        exposure, emissionScale, gasSpeedCeiling, beamingDensityFloor, volumeOpacity, starBrightness, stillSettleSteps, stillTile,
         commandBufferBudgetMilliseconds, memoryBudgetFraction, memoryBudgetCapBytes,
     ]
 }

@@ -64,8 +64,9 @@ typedef struct {
     float captureRadius;
     float escapeRadius;
     unsigned int stepCap;
-    float padding0;
-    float padding1;
+    /// Step policy while the ray is too far from the disk slab to sample anything.
+    float emptyStepFactor;
+    float emptyStepMax;
 } GeodesicSettings;
 
 enum {
@@ -96,9 +97,12 @@ typedef struct {
     float halfExtent;
     float peakTemperature;
     float emissionScale;
-    float padding0;
-    float padding1;
-    float padding2;
+    /// Changes every frame; salts the stochastic deposit.
+    unsigned int frame;
+    /// 1 deposits into all eight cloud in cell corners with their weights;
+    /// 0 picks one corner per particle with those weights as probabilities.
+    unsigned int exactDeposit;
+    simd_uint2 seed;
 } SplatUniforms;
 
 typedef struct {
@@ -135,11 +139,6 @@ typedef struct {
     float padding2;
     /// Subpixel sample offset in input pixels, for temporal upscaling.
     simd_float2 jitter;
-    /// Previous frame's camera, for motion vectors by straight line reprojection.
-    simd_float3 previousPosition;
-    simd_float3 previousRight;
-    simd_float3 previousUp;
-    simd_float3 previousForward;
     GeodesicSettings geodesic;
 } MarchUniforms;
 

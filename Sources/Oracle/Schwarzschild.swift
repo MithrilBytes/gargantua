@@ -142,26 +142,45 @@ public enum Schwarzschild {
         public var captureRadius: Double
         public var escapeRadius: Double
         public var stepCap: Int
+        /// Step policy while the ray is too far from the disk slab to sample anything.
+        public var emptyStepFactor: Double
+        public var emptyStepMax: Double
 
         public init(stepFactor: Double = Constants.stepRadiusFactor.value,
                     stepMin: Double = Constants.stepMin.value,
                     stepMax: Double = Constants.stepMax.value,
                     captureRadius: Double = Constants.captureRadius.value,
                     escapeRadius: Double = Constants.escapeRadius.value,
-                    stepCap: Int) {
+                    stepCap: Int,
+                    emptyStepFactor: Double? = nil,
+                    emptyStepMax: Double? = nil) {
             self.stepFactor = stepFactor
             self.stepMin = stepMin
             self.stepMax = stepMax
             self.captureRadius = captureRadius
             self.escapeRadius = escapeRadius
             self.stepCap = stepCap
+            self.emptyStepFactor = emptyStepFactor ?? stepFactor
+            self.emptyStepMax = emptyStepMax ?? stepMax
         }
 
-        public static let interactive = Settings(stepCap: Int(Constants.stepCapInteractive.value))
-        public static let still = Settings(stepCap: Int(Constants.stepCapStill.value))
+        public static let interactive = Settings(stepCap: Int(Constants.stepCapInteractive.value),
+                                                 emptyStepFactor: Constants.emptyStepFactorInteractive.value,
+                                                 emptyStepMax: Constants.emptyStepMaxInteractive.value)
+        public static let still = Settings(stepCap: Int(Constants.stepCapStill.value),
+                                           emptyStepFactor: Constants.emptyStepFactorStill.value,
+                                           emptyStepMax: Constants.emptyStepMaxStill.value)
 
         public func stepLength(at r: Double) -> Double {
             min(max(stepFactor * r, stepMin), stepMax)
+        }
+
+        /// A ray farther from the disk slab than the coarse step it is about
+        /// to take cannot land inside the slab; the coarser policy applies.
+        public func stepLength(at r: Double, z: Double) -> Double {
+            let coarse = min(max(emptyStepFactor * r, stepMin), emptyStepMax)
+            if abs(z) > Constants.diskSlabHalfHeight.value + coarse { return coarse }
+            return stepLength(at: r)
         }
     }
 
@@ -184,7 +203,8 @@ public enum Schwarzschild {
         var drift = 0.0
         let lScale = max(abs(launch.angularMomentum), 1e-3)
         while steps < settings.stepCap {
-            ray.state = step(ray.state, h: settings.stepLength(at: ray.state.r))
+            let h = settings.stepLength(at: ray.state.r, z: ray.position.z)
+            ray.state = step(ray.state, h: h)
             steps += 1
             let eDrift = abs(energy(ray.state) - launch.energy) / abs(launch.energy)
             let lDrift = abs(angularMomentum(ray.state) - launch.angularMomentum) / lScale
@@ -209,9 +229,12 @@ public enum Schwarzschild {
     /// after a smooth compression below c. Mirrors march.metal.
     public static func redshiftFactor(radius r: Double, direction: SIMD3<Double>, gas: SIMD3<Double>) -> Double {
         let ceiling = Constants.gasSpeedCeiling.value
-        let speed = (gas * gas).sum().squareRoot()
+        // Capped like the kernel so the two sides stay identical; fp32 tanh
+        // on the GPU overflows for arguments beyond about 44.
+        let magnitude = (gas * gas).sum().squareRoot()
+        let speed = min(magnitude, 8.0)
         let beta = speed > 0 ? ceiling * tanh(speed / ceiling) : 0.0
-        let velocity = speed > 0 ? gas * (beta / speed) : SIMD3(repeating: 0.0)
+        let velocity = magnitude > 0 ? gas * (beta / magnitude) : SIMD3(repeating: 0.0)
         let gamma = 1.0 / (1.0 - beta * beta).squareRoot()
         return max(f(r), 0.0).squareRoot() / (gamma * (1.0 + (direction * velocity).sum()))
     }

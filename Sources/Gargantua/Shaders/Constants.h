@@ -63,6 +63,10 @@
 // Source: gargantua design choice, see note.
 #define DRAG_ALPHA (0.003f)
 
+// No bound orbit in the Paczynski and Wiita potential moves faster than free fall from rest at infinity to the capture radius, sqrt(2 / (R_CAPTURE - 2)) = 10; anything beyond this margin is a particle the integrator kicked across the capture sphere in one step, and it is treated as captured.
+// Source: gargantua design choice, see note.
+#define PLUNGE_SPEED_LIMIT (12.0f)
+
 // Gaussian velocity dispersion per component as a fraction of the local circular speed, applied at seeding and respawn.
 // Source: gargantua design choice, see note.
 #define FEED_VELOCITY_DISPERSION (0.02f)
@@ -78,6 +82,10 @@
 // Stylized. Floor on the zero torque factor 1 - sqrt(r_isco / r) so gas inside the innermost stable orbit keeps a finite, cooler temperature instead of vanishing.
 // Source: gargantua design choice, see note.
 #define ZERO_TORQUE_FLOOR (0.01f)
+
+// Corners of the trilinear cloud in cell deposit. Interactive frames choose one corner per particle with the trilinear weights as probabilities, an unbiased estimate whose expectation is the exact deposit; stills deposit into all eight.
+// Source: Hockney, R. W. and Eastwood, J. W., 1988. Computer Simulation Using Particles. Taylor and Francis, ch. 5 (cloud in cell weighting).
+#define CIC_CORNERS (8u)
 
 // Lowest temperature in the blackbody color table, kelvin. The table is log spaced.
 // Source: gargantua design choice, see note.
@@ -107,9 +115,33 @@
 // Source: gargantua design choice, see note.
 #define STEP_MIN (0.02f)
 
-// Largest affine step.
+// Largest affine step while a ray is near the disk slab, about one voxel of the default volume, so the gather resolves it.
 // Source: gargantua design choice, see note.
 #define STEP_MAX (0.5f)
+
+// Interactive step factor while a ray is farther from the disk slab than the step it would take; nothing can be sampled there and fourth order accuracy allows it. Chosen from the docs/lab/02 sweep: E and L drift 1.5e-5 against the 1e-4 interactive budget, image difference 1.2e-3.
+// Source: gargantua design choice, see note.
+#define STEP_FACTOR_EMPTY_INTERACTIVE (0.1f)
+
+// Largest interactive step away from the slab, from the docs/lab/02 sweep.
+// Source: gargantua design choice, see note.
+#define STEP_MAX_EMPTY_INTERACTIVE (3.0f)
+
+// Still render step factor away from the slab; gentler than interactive so the drift stays under the tighter 1e-5 still budget (measured 3e-6 in the docs/lab/02 sweep).
+// Source: gargantua design choice, see note.
+#define STEP_FACTOR_EMPTY_STILL (0.06f)
+
+// Largest still render step away from the slab, from the docs/lab/02 sweep.
+// Source: gargantua design choice, see note.
+#define STEP_MAX_EMPTY_STILL (1.5f)
+
+// Threadgroup shape for the ray kernels; 8 by 8 measured 10 percent faster than the previous 32 by 4 in the docs/lab/03 sweep.
+// Source: gargantua design choice, see note.
+#define MARCH_THREADGROUP_WIDTH (8u)
+
+// See MARCH_THREADGROUP_WIDTH.
+// Source: gargantua design choice, see note.
+#define MARCH_THREADGROUP_HEIGHT (8u)
 
 // Stored samples per ray inside the volume cube for the bake strategy.
 // Source: gargantua design choice, see note.
@@ -146,6 +178,10 @@
 // Stylized. The simulated gas speed is compressed to beta = ceiling tanh(v / ceiling) before the Doppler factor, since pseudo Newtonian orbits exceed c inside r of about 4; the innermost stable orbit speed 0.61 maps to 0.52, close to the Schwarzschild value 0.5.
 // Source: gargantua design choice, see note.
 #define GAS_SPEED_CEILING (0.85f)
+
+// Stylized. Doppler beaming blends in with min(density / floor, 1); below it only the gravitational redshift applies. A voxel holding one or two particles has no meaningful bulk velocity, and beaming it fully makes each plunging particle strobe as its velocity sweeps the camera direction. Forty per cubic M is about four particles in a default voxel.
+// Source: gargantua design choice, see note.
+#define BEAMING_DENSITY_FLOOR (40.0f)
 
 // Stylized. Extinction per unit path length per unit particle density; small so the far side of the disk and its lensed images stay visible.
 // Source: gargantua design choice, see note.

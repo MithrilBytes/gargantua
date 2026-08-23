@@ -23,16 +23,19 @@ import Oracle
 
     @Test func conservedQuantitiesHoldInDoublePrecision() {
         let ray = Schwarzschild.launch(from: SIMD3(40.0, 5.0, 15.0), direction: SIMD3(-0.95, -0.2, -0.3))
-        let result = Schwarzschild.integrate(ray, settings: .still)
+        let settings = Schwarzschild.Settings(stepCap: Int(Constants.stepCapStill.value))
+        let result = Schwarzschild.integrate(ray, settings: settings)
         #expect(result.outcome != .exhausted)
-        // The step policy, not the precision, sets this floor: halving the
-        // step factor drops the drift by about sixteen, as fourth order does.
+        // The step policy, not the precision, sets this floor: halving every
+        // step drops the drift by about sixteen, as fourth order does.
         #expect(result.drift < 1e-6)
         #expect(abs(Schwarzschild.nullResidual(result.ray.state)) < 1e-6)
-        var finer = Schwarzschild.Settings.still
+        var finer = settings
         finer.stepFactor *= 0.5
         finer.stepMin *= 0.5
         finer.stepMax *= 0.5
+        finer.emptyStepFactor *= 0.5
+        finer.emptyStepMax *= 0.5
         let refined = Schwarzschild.integrate(ray, settings: finer)
         #expect(refined.drift < result.drift / 8.0)
     }

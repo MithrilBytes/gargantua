@@ -77,6 +77,18 @@ import Oracle
         #expect(captured)
     }
 
+    @Test func tunnelingThroughTheCaptureSphereCounts() {
+        // One step from (3, 0.1, 0) straight through the origin region to
+        // the far side never has an endpoint inside the capture radius.
+        let before = SIMD3(3.0, 0.1, 0.0)
+        let after = ParticleState(position: SIMD3(-3.0, 0.1, 0.0), velocity: SIMD3(-60.0, 0.0, 0.0))
+        #expect(ParticleDynamics.removed(before: before, after: after))
+        let grazing = ParticleState(position: SIMD3(2.5, 2.5, 0.0), velocity: SIMD3(0.5, 0.0, 0.0))
+        #expect(!ParticleDynamics.removed(before: SIMD3(2.6, 2.4, 0.0), after: grazing))
+        let runaway = ParticleState(position: SIMD3(10.0, 0.0, 0.0), velocity: SIMD3(40.0, 0.0, 0.0))
+        #expect(ParticleDynamics.removed(before: SIMD3(9.0, 0.0, 0.0), after: runaway))
+    }
+
     @Test func orbitOutsideIscoSurvivesTheSameNudge() {
         let potential = Potential.paczynskiWiita
         let dynamics = ParticleDynamics(potential: potential, alpha: 0.0)

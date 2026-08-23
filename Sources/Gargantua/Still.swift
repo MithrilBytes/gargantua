@@ -21,6 +21,7 @@ enum Still {
 
         let simPass = SimPass(context: context)
         let splatPass = SplatPass(context: context)
+        splatPass.exactDeposit = true
         let marchPass = MarchPass(context: context)
         let presentPass = PresentPass(context: context, pixelFormat: .bgra8Unorm_srgb)
         let capture = Capture(context: context, presentPass: presentPass, pixelFormat: .bgra8Unorm_srgb)
@@ -42,7 +43,7 @@ enum Still {
         descriptor.storageMode = .private
         let full = context.makeTexture(descriptor, label: "still image")
         let targets = MarchPass.makeTargets(context: context, width: tile, height: tile, label: "still tile")
-        let camera = OrbitCamera()
+        let camera = OrbitCamera.from(options)
         let columns = (width + tile - 1) / tile
         let rows = (height + tile - 1) / tile
         Console.line("rendering \(width) by \(height) in \(columns * rows) tiles")
@@ -67,6 +68,27 @@ enum Still {
             Console.line("row \(row + 1) of \(rows)")
         }
 
+        if let count = options.sequence {
+            let sequenceTargets = MarchPass.makeTargets(context: context, width: 960, height: 540, label: "sequence")
+            splatPass.exactDeposit = false
+            for frame in 0..<count {
+                let commandBuffer = context.makeCommandBuffer(label: "sequence frame")
+                simPass.encodeStep(commandBuffer, system: system)
+                splatPass.encode(commandBuffer, system: system, volume: volume)
+                let frameUniforms = MarchPass.uniforms(camera: camera, width: 960, height: 540, settings: .interactive,
+                                                       driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
+                                                       starSeed: UInt32(truncatingIfNeeded: configuration.seed), tables: marchPass.tables)
+                marchPass.encodeImage(commandBuffer, uniforms: frameUniforms, volume: volume, blackbody: system.blackbody, targets: sequenceTargets, counters: nil)
+                commandBuffer.commit()
+                commandBuffer.waitUntilCompleted()
+                let name = URL(fileURLWithPath: path).deletingLastPathComponent().appending(path: String(format: "seq-%03d.png", frame))
+                guard capture.write(hdr: sequenceTargets.output, to: name) else {
+                    Exit.operational("Could not write the sequence frame to \(name.path).")
+                }
+            }
+            splatPass.exactDeposit = true
+            Console.line("sequence of \(count) frames beside the still")
+        }
         let url = URL(fileURLWithPath: path)
         guard capture.write(hdr: full, to: url) else {
             Exit.operational("Could not write the still to \(url.path).")

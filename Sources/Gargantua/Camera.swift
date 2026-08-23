@@ -2,6 +2,16 @@ import simd
 
 /// Orbit camera looking at the hole. The disk lies in the xy plane with z up.
 struct OrbitCamera: Equatable {
+    static func from(_ options: Options) -> OrbitCamera {
+        var camera = OrbitCamera()
+        if let start = options.camera {
+            camera.azimuth = Float(start.azimuth)
+            camera.elevation = min(max(Float(start.elevation), -1.5), 1.5)
+            camera.distance = min(max(Float(start.distance), OrbitCamera.minimumDistance), OrbitCamera.maximumDistance)
+        }
+        return camera
+    }
+
     var azimuth: Float = 0.6
     var elevation: Float = 0.32
     var distance: Float = 52.0

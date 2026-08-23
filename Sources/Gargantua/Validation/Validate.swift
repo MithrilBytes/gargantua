@@ -24,6 +24,7 @@ enum Validate {
         }
         let simPass = SimPass(context: context)
         let splatPass = SplatPass(context: context)
+        splatPass.exactDeposit = true
         let marchPass = MarchPass(context: context)
         let volume = Volume(context: context, size: configuration.volume)
         let system = ParticleSystem(context: context, count: configuration.particles, seed: configuration.seed, potential: .paczynskiWiita)

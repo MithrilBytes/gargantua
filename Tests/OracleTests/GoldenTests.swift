@@ -45,13 +45,11 @@ enum Goldens {
         let count: UInt32 = 24_000
         var particles = (0..<count).map { DiskModel.spawn(index: $0, event: 0, seed: seed, inverseCdf: table, potential: potential) }
         var respawns = [UInt32](repeating: 0, count: Int(count))
-        let capture = Constants.captureRadius.value
-        let escape = Constants.escapeRadius.value
         for _ in 0..<Int(golden.parameter("settlingSteps")) {
             for i in 0..<Int(count) {
+                let before = particles[i].position
                 dynamics.step(&particles[i])
-                let r = particles[i].radius
-                if r < capture || r > escape {
+                if ParticleDynamics.removed(before: before, after: particles[i]) {
                     respawns[i] += 1
                     particles[i] = DiskModel.spawn(index: UInt32(i), event: respawns[i], seed: seed, inverseCdf: table, potential: potential)
                 }

@@ -171,7 +171,12 @@ static inline float3 sphereExitDirection(PlaneRay ray, constant MarchUniforms& u
     return asymptoticDirection(ray, ray.s.phi + sweep);
 }
 
-static inline float rayStepLength(float r, GeodesicSettings g) {
+// Step length for the next step. A ray farther from the disk slab than the
+// coarse step it is about to take cannot land inside the slab, and there is
+// nothing to sample where it is, so the coarser policy applies there.
+static inline float rayStepLength(float3 position, float r, GeodesicSettings g) {
+    float coarse = clamp(g.emptyStepFactor * r, g.stepMin, g.emptyStepMax);
+    if (abs(position.z) > DISK_SLAB_HALF_HEIGHT + coarse) return coarse;
     return clamp(g.stepFactor * r, g.stepMin, g.stepMax);
 }
 
@@ -218,9 +223,14 @@ static float3 starfield(float3 direction, uint seed,
 // because the pseudo Newtonian orbits exceed c inside r of about 4.
 // Mirrors Oracle/Schwarzschild.swift redshiftFactor.
 static inline float redshiftFactor(float f, float3 direction, float3 gas) {
-    float speed = length(gas);
+    // Plunging gas reaches coordinate speeds of tens of c in the pseudo
+    // Newtonian dynamics, and single precision tanh overflows to nan for
+    // arguments beyond about 44 (exp(2x) is infinite there). tanh(8 / 0.85)
+    // is already 1 to eight decimals, so the argument is capped first.
+    float magnitude = length(gas);
+    float speed = min(magnitude, 8.0f);
     float beta = speed > 0.0f ? GAS_SPEED_CEILING * tanh(speed / GAS_SPEED_CEILING) : 0.0f;
-    float3 velocity = speed > 0.0f ? gas * (beta / speed) : float3(0.0f);
+    float3 velocity = magnitude > 0.0f ? gas * (beta / magnitude) : float3(0.0f);
     float gamma = rsqrt(1.0f - beta * beta);
     return sqrt(max(f, 0.0f)) / (gamma * (1.0f + dot(direction, velocity)));
 }

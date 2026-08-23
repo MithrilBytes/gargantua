@@ -37,6 +37,20 @@ public struct ParticleDynamics: Sendable {
         state.position += state.velocity * dt
     }
 
+    /// Whether the step from `before` ended a particle: swept past the
+    /// capture sphere, left the scene, or was kicked to a speed no bound
+    /// orbit reaches. Mirrors the kernel.
+    public static func removed(before: SIMD3<Double>, after state: ParticleState) -> Bool {
+        let travel = state.position - before
+        let lengthSquared = max((travel * travel).sum(), 1e-12)
+        let along = min(max(-(before * travel).sum() / lengthSquared, 0.0), 1.0)
+        let closestPoint = before + along * travel
+        let closest = (closestPoint * closestPoint).sum().squareRoot()
+        return closest < Constants.captureRadius.value
+            || state.radius > Constants.escapeRadius.value
+            || state.speed > Constants.plungeSpeedLimit.value
+    }
+
     public func step(_ state: inout ParticleState, count: Int) {
         for _ in 0..<count { step(&state) }
     }

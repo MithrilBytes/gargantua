@@ -188,6 +188,9 @@ Stylized, by design and named as such in `Sources/Oracle/Constants.swift`:
   Schwarzschild value 0.5.
 - `DRAG_ALPHA`, `FEED_VELOCITY_DISPERSION` and `DISK_ASPECT`, which set the
   inflow rate, the orbital dispersion and the disk thickness.
+- `BEAMING_DENSITY_FLOOR`: Doppler beaming fades out in voxels too sparse
+  to have a meaningful bulk velocity, so lone plunging particles do not
+  strobe; gravitational redshift always applies.
 - `EMISSION_SCALE`, `VOLUME_OPACITY`, `STAR_BRIGHTNESS` and
   `EXPOSURE_DEFAULT`, which set the look of the image.
 
@@ -199,21 +202,22 @@ were read.
 `gargantua bench` on an M1 Pro with a 16 core GPU, default preset, 960 by
 540 march, 1920 by 1080 output, 30 iterations per pass:
 
-| Pass    | ms    | Spec budget on a base M1 |
-| ------- | ----- | ------------------------ |
-| sim     | 0.35  | 1.5                      |
-| splat   | 4.4   | 2.0                      |
-| march   | 31.8  | 8.0                      |
-| walk    | 2.4   |                          |
-| bake    | 33.9 once per camera stop |              |
-| upscale | 1.2   | 1.5 with present         |
-| present | 0.1   |                          |
+| Pass    | at M4 | now  | Spec budget on a base M1 |
+| ------- | ----- | ---- | ------------------------ |
+| sim     | 0.35  | 0.36 | 1.5                      |
+| splat   | 4.4   | 2.8  | 2.0                      |
+| march   | 31.8  | 10.5 | 8.0                      |
+| walk    | 2.4   | 2.0  |                          |
+| bake    | 33.9  | 10.2 | once per camera stop     |
+| upscale | 1.2   | 1.2  | 1.5 with present         |
+| present | 0.1   | 0.1  |                          |
 
-A march frame is 38 ms and a walked frame 8 ms on this machine; the base M1
-has half the GPU cores. The march line is the one the optimization campaign
-attacks; the lanes and their measurements land as dated writeups in
-`docs/lab/`. The first lane, sweep tables outside the integration sphere,
-took the march to 17.0 ms and the frame to 24.1 ms. Reports from `bench` are committed in `bench/results/`
+A march frame went from 37.8 ms at M4 to 15.0 ms, inside one 60 Hz
+interval, and a walked frame from 8.4 to 6.5 ms; the base M1 has half the
+GPU cores. The campaign's lanes and their measurements land as dated
+writeups in `docs/lab/`: sweep tables outside the integration sphere,
+a coarser step policy on the empty legs of each ray, 8 by 8 threadgroups,
+and a splat whose resolve carries no atomics. Reports from `bench` are committed in `bench/results/`
 alongside the change they measure, and a regression is caught by reading
 two files side by side.
 

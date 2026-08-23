@@ -30,7 +30,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
     private let capture: Capture
     private let hudRenderer: HudRenderer
     private var system: ParticleSystem
-    private var camera = OrbitCamera()
+    private var camera: OrbitCamera
     private var stats = FrameStats()
     private var paused = false
     private var hudVisible = true
@@ -48,6 +48,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         self.context = context
         self.view = view
         configuration = Configuration.make(options)
+        camera = OrbitCamera.from(options)
         maxAllowed = configuration.preset == .max
         quitPath = options.quitPath
         upscaleWanted = options.upscale
@@ -155,7 +156,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         }
         let jitter = (upscaler != nil && !walking) ? Jitter.offset(frame: frameIndex) : SIMD2<Float>(0, 0)
         frameIndex += 1
-        let uniforms = MarchPass.uniforms(camera: camera, previous: previousCamera, jitter: jitter, width: hdr.width, height: hdr.height,
+        let uniforms = MarchPass.uniforms(camera: camera, jitter: jitter, width: hdr.width, height: hdr.height,
                                           settings: .interactive, driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
                                           starSeed: UInt32(truncatingIfNeeded: system.seed),
                                           bakeSpacing: bakePass?.spacing(volumeSize: volume.size) ?? 0, tables: marchPass.tables)
