@@ -187,7 +187,37 @@ public enum Constants {
         note: "Affine step length is this fraction of the radius, clamped between STEP_MIN and STEP_MAX.")
 
     public static let stepMin = Constant<Double>("STEP_MIN", 0.02, source: design, note: "Smallest affine step.")
-    public static let stepMax = Constant<Double>("STEP_MAX", 0.5, source: design, note: "Largest affine step.")
+    public static let stepMax = Constant<Double>("STEP_MAX", 0.5, source: design, note: "Largest affine step while a ray is near the disk slab, about one voxel of the default volume, so the gather resolves it.")
+
+    public static let emptyStepFactorInteractive = Constant<Double>(
+        "STEP_FACTOR_EMPTY_INTERACTIVE", 0.1,
+        source: design,
+        note: "Interactive step factor while a ray is farther from the disk slab than the step it would take; nothing can be sampled there and fourth order accuracy allows it. Chosen from the docs/lab/02 sweep: E and L drift 1.5e-5 against the 1e-4 interactive budget, image difference 1.2e-3.")
+
+    public static let emptyStepMaxInteractive = Constant<Double>(
+        "STEP_MAX_EMPTY_INTERACTIVE", 3.0,
+        source: design,
+        note: "Largest interactive step away from the slab, from the docs/lab/02 sweep.")
+
+    public static let emptyStepFactorStill = Constant<Double>(
+        "STEP_FACTOR_EMPTY_STILL", 0.06,
+        source: design,
+        note: "Still render step factor away from the slab; gentler than interactive so the drift stays under the tighter 1e-5 still budget (measured 3e-6 in the docs/lab/02 sweep).")
+
+    public static let emptyStepMaxStill = Constant<Double>(
+        "STEP_MAX_EMPTY_STILL", 1.5,
+        source: design,
+        note: "Largest still render step away from the slab, from the docs/lab/02 sweep.")
+
+    public static let marchThreadgroupWidth = Constant<UInt32>(
+        "MARCH_THREADGROUP_WIDTH", 8,
+        source: design,
+        note: "Threadgroup shape for the ray kernels; 8 by 8 measured 10 percent faster than the previous 32 by 4 in the docs/lab/03 sweep.")
+
+    public static let marchThreadgroupHeight = Constant<UInt32>(
+        "MARCH_THREADGROUP_HEIGHT", 8,
+        source: design,
+        note: "See MARCH_THREADGROUP_WIDTH.")
 
     public static let bakeSamples = Constant<UInt32>(
         "BAKE_SAMPLES", 96,
@@ -279,7 +309,9 @@ public enum Constants {
         captureRadius, escapeRadius, diskOuterRadius, feedInnerRadius, diskSlabHalfHeight, volumeHalfExtent,
         simulationTimestep, simulationSubsteps, dragAlpha, feedVelocityDispersion, diskAspectRatio,
         peakTemperature, zeroTorqueFloor, blackbodyMinTemperature, blackbodyMaxTemperature, blackbodyTableSize,
-        stepCapInteractive, stepCapStill, stepRadiusFactor, stepMin, stepMax, bakeSamples, bakeSpacingVoxels, bakeFrames, sweepTableSize,
+        stepCapInteractive, stepCapStill, stepRadiusFactor, stepMin, stepMax,
+        emptyStepFactorInteractive, emptyStepMaxInteractive, emptyStepFactorStill, emptyStepMaxStill,
+        marchThreadgroupWidth, marchThreadgroupHeight, bakeSamples, bakeSpacingVoxels, bakeFrames, sweepTableSize,
         driftBudgetInteractive, driftBudgetStill,
         exposure, emissionScale, gasSpeedCeiling, volumeOpacity, starBrightness, stillSettleSteps, stillTile,
         commandBufferBudgetMilliseconds, memoryBudgetFraction, memoryBudgetCapBytes,

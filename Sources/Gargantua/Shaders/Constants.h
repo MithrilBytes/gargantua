@@ -107,9 +107,33 @@
 // Source: gargantua design choice, see note.
 #define STEP_MIN (0.02f)
 
-// Largest affine step.
+// Largest affine step while a ray is near the disk slab, about one voxel of the default volume, so the gather resolves it.
 // Source: gargantua design choice, see note.
 #define STEP_MAX (0.5f)
+
+// Interactive step factor while a ray is farther from the disk slab than the step it would take; nothing can be sampled there and fourth order accuracy allows it. Chosen from the docs/lab/02 sweep: E and L drift 1.5e-5 against the 1e-4 interactive budget, image difference 1.2e-3.
+// Source: gargantua design choice, see note.
+#define STEP_FACTOR_EMPTY_INTERACTIVE (0.1f)
+
+// Largest interactive step away from the slab, from the docs/lab/02 sweep.
+// Source: gargantua design choice, see note.
+#define STEP_MAX_EMPTY_INTERACTIVE (3.0f)
+
+// Still render step factor away from the slab; gentler than interactive so the drift stays under the tighter 1e-5 still budget (measured 3e-6 in the docs/lab/02 sweep).
+// Source: gargantua design choice, see note.
+#define STEP_FACTOR_EMPTY_STILL (0.06f)
+
+// Largest still render step away from the slab, from the docs/lab/02 sweep.
+// Source: gargantua design choice, see note.
+#define STEP_MAX_EMPTY_STILL (1.5f)
+
+// Threadgroup shape for the ray kernels; 8 by 8 measured 10 percent faster than the previous 32 by 4 in the docs/lab/03 sweep.
+// Source: gargantua design choice, see note.
+#define MARCH_THREADGROUP_WIDTH (8u)
+
+// See MARCH_THREADGROUP_WIDTH.
+// Source: gargantua design choice, see note.
+#define MARCH_THREADGROUP_HEIGHT (8u)
 
 // Stored samples per ray inside the volume cube for the bake strategy.
 // Source: gargantua design choice, see note.
