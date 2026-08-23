@@ -119,11 +119,17 @@ enum Bench {
             presentPass.encode(commandBuffer, pass: pass, hdr: upscaler?.output ?? targets.output, debug: nil, hudTexture: nil, targetWidth: outputWidth, targetHeight: outputHeight)
         }
 
-        let shared = (passes["sim"]?.mean ?? 0) + (passes["splat"]?.mean ?? 0) + (passes["upscale"]?.mean ?? 0) + (passes["present"]?.mean ?? 0)
-        let marchFrame = shared + (passes["march"]?.mean ?? 0)
-        let bakeFrame = shared + (passes["walk"]?.mean ?? 0)
-        let bakeCost = passes["bake"]?.mean ?? 0
-        let bakeBytes = UInt64(width * height) * UInt64(Constants.bakeSamples.value) * 8 + UInt64(width * height) * 16
+        func mean(_ name: String) -> Double {
+            guard let timing = passes[name] else { return 0 }
+            return timing.mean
+        }
+        let shared = mean("sim") + mean("splat") + mean("upscale") + mean("present")
+        let marchFrame = shared + mean("march")
+        let bakeFrame = shared + mean("walk")
+        let bakeCost = mean("bake")
+        let pixels = UInt64(width * height)
+        let sampleBytes = pixels * UInt64(Constants.bakeSamples.value) * 8
+        let bakeBytes = sampleBytes + pixels * 16
         let verdict = String(format: "march frame %.1f ms, bake frame %.1f ms after a %.1f ms bake per camera stop and %@ of samples (%u rays over the sample budget); %@",
                              marchFrame * 1000, bakeFrame * 1000, bakeCost * 1000, formatBytes(bakeBytes), bakePass.overflowCount,
                              bakeFrame < marchFrame ? "the walk is faster while the camera holds still, the march is free to move" : "the march is faster")

@@ -127,7 +127,11 @@ enum Validate {
         let n = Int(golden.parameter("raysPerRound"))
         var measured: Double?
         rounds: for _ in 0..<Int(golden.parameter("rounds")) {
-            let values = (0..<n).map { low + (high - low) * (Double($0) + 0.5) / Double(n) }
+            var values: [Double] = []
+            for i in 0..<n {
+                let fraction = (Double(i) + 0.5) / Double(n)
+                values.append(low + (high - low) * fraction)
+            }
             let results = probes.run(values.map { Probes.aimed(radius: radius, impactParameter: $0) }, settings: .still)
             if let exhausted = results.firstIndex(where: { $0.outcome == RayExhausted }) {
                 measured = values[exhausted]

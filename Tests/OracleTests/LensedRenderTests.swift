@@ -13,7 +13,10 @@ enum SyntheticDisk {
         for z in 0..<size {
             for y in 0..<size {
                 for x in 0..<size {
-                    let p = SIMD3(Double(x) + 0.5, Double(y) + 0.5, Double(z) + 0.5) * voxel - half
+                    let px = (Double(x) + 0.5) * voxel - half
+                    let py = (Double(y) + 0.5) * voxel - half
+                    let pz = (Double(z) + 0.5) * voxel - half
+                    let p = SIMD3(px, py, pz)
                     let r = (p.x * p.x + p.y * p.y).squareRoot()
                     guard r > 6.0, r < 24.0, abs(p.z) < 0.75 else { continue }
                     let t = DiskModel.temperature(radius: r)
@@ -34,7 +37,10 @@ enum SyntheticDisk {
 
     static var camera: LensedRender.Camera {
         let elevation = 0.32, azimuth = 0.6, distance = 52.0
-        let position = distance * SIMD3(cos(elevation) * cos(azimuth), cos(elevation) * sin(azimuth), sin(elevation))
+        let px = distance * cos(elevation) * cos(azimuth)
+        let py = distance * cos(elevation) * sin(azimuth)
+        let pz = distance * sin(elevation)
+        let position = SIMD3(px, py, pz)
         let forward = -position / distance
         var right = SIMD3(forward.y * 1.0 - forward.z * 0.0, forward.z * 0.0 - forward.x * 1.0, 0.0)
         right /= (right * right).sum().squareRoot()
