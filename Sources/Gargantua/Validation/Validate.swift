@@ -262,7 +262,7 @@ enum Validate {
         let uniforms = MarchPass.uniforms(camera: camera, width: width, height: height, settings: .still,
                                           driftBudget: Constants.driftBudgetStill.value, redshift: true, starSeed: 0, stars: false)
         let render = context.makeCommandBuffer(label: "validate render")
-        marchPass.encodeImage(render, uniforms: uniforms, volume: volume, blackbody: system.blackbody, output: targets.output, debug: targets.debug, counters: nil)
+        marchPass.encodeImage(render, uniforms: uniforms, volume: volume, blackbody: system.blackbody, targets: targets, counters: nil)
         render.commit()
         render.waitUntilCompleted()
         let gpuImage = readImage(targets.output, context: context)

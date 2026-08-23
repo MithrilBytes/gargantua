@@ -21,6 +21,10 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
     private let marchPass: MarchPass
     private let presentPass: PresentPass
     private var volume: Volume
+    private var upscaler: Upscaler?
+    private var previousCamera: OrbitCamera?
+    private var frameIndex = 0
+    private var upscaleWanted: Bool
     private let capture: Capture
     private let hudRenderer: HudRenderer
     private var system: ParticleSystem
@@ -38,12 +42,13 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
     private let maxAllowed: Bool
     private let quitPath: QuitPath
 
-    init(context: GpuContext, view: MTKView, options: Options) {
+    init(context: GpuContext, view: MTKView, options: Options, estimatedDrawable: (Int, Int)) {
         self.context = context
         self.view = view
         configuration = Configuration.make(options)
         maxAllowed = configuration.preset == .max
         quitPath = options.quitPath
+        upscaleWanted = options.upscale
 
         if let refusal = context.budget.refusal(bytes: configuration.bytes, describing: "Preset \(configuration.preset.rawValue)") {
             Exit.operational(refusal)
@@ -74,6 +79,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         presentPass.exposure = Float(Constants.exposure.value)
         super.init()
         marchPass.resize(width: configuration.marchWidth, height: configuration.marchHeight)
+        rebuildUpscaler(width: estimatedDrawable.0, height: estimatedDrawable.1)
         let clear = context.makeCommandBuffer(label: "clear volume")
         volume.encodeClear(clear)
         clear.commit()
@@ -83,7 +89,19 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
 
     nonisolated func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         // The march target is sized by the preset, not the window; the
-        // present pass scales it to whatever the drawable is.
+        // upscaler or the present pass takes it to the drawable.
+        MainActor.assumeIsolated { rebuildUpscaler(width: Int(size.width), height: Int(size.height)) }
+    }
+
+    private func rebuildUpscaler(width: Int, height: Int) {
+        guard upscaleWanted, width > 0, height > 0 else { upscaler = nil; return }
+        if let upscaler, upscaler.outputWidth == width, upscaler.outputHeight == height,
+           upscaler.inputWidth == configuration.marchWidth, upscaler.inputHeight == configuration.marchHeight { return }
+        upscaler = Upscaler(context: context, inputWidth: configuration.marchWidth, inputHeight: configuration.marchHeight, outputWidth: width, outputHeight: height)
+        if upscaler == nil {
+            Console.line("MetalFX temporal upscaling is not available on this device; presenting the march resolution directly.")
+            upscaleWanted = false
+        }
     }
 
     nonisolated func draw(in view: MTKView) {
@@ -118,18 +136,29 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
             simPass.encodeStep(commandBuffer, system: system)
         }
         splatPass.encode(commandBuffer, system: system, volume: volume)
-        let uniforms = MarchPass.uniforms(camera: camera, width: hdr.width, height: hdr.height, settings: .interactive,
-                                          driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
+        if upscaler == nil, upscaleWanted {
+            rebuildUpscaler(width: drawable.texture.width, height: drawable.texture.height)
+        }
+        let jitter = upscaler != nil ? Jitter.offset(frame: frameIndex) : SIMD2<Float>(0, 0)
+        frameIndex += 1
+        let uniforms = MarchPass.uniforms(camera: camera, previous: previousCamera, jitter: jitter, width: hdr.width, height: hdr.height,
+                                          settings: .interactive, driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
                                           starSeed: UInt32(truncatingIfNeeded: system.seed))
+        previousCamera = camera
         marchPass.encodeFrame(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody)
+        var presented = hdr
+        if let upscaler, let depth = marchPass.depth, let motion = marchPass.motion {
+            upscaler.encode(commandBuffer, color: hdr, depth: depth, motion: motion, jitter: jitter)
+            presented = upscaler.output
+        }
         let scale = view.window?.backingScaleFactor ?? 2
         let hudTexture = hudVisible ? hudRenderer.texture(for: Hud.lines(hudState()), scale: scale) : nil
-        presentPass.encode(commandBuffer, pass: pass, hdr: hdr, debug: marchPass.debug, hudTexture: hudTexture,
+        presentPass.encode(commandBuffer, pass: pass, hdr: presented, debug: marchPass.debug, hudTexture: hudTexture,
                            targetWidth: drawable.texture.width, targetHeight: drawable.texture.height)
         if screenshotRequested {
             screenshotRequested = false
             let finishing = soak?.finishing ?? false
-            capture.encodeScreenshot(commandBuffer, hdr: hdr) { url in
+            capture.encodeScreenshot(commandBuffer, hdr: presented) { url in
                 Task { @MainActor in
                     Console.line(url.map { "screenshot \($0.path)" } ?? "screenshot failed to write")
                     if finishing { self.quit() }
@@ -162,7 +191,8 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
             gpuMilliseconds: stats.gpuDisplayed * 1000,
             paused: paused,
             gpuErrors: stats.gpuErrors,
-            validation: validation)
+            validation: validation,
+            renderer: rendererDescription())
     }
 
     /// End a soak through the requested path. The key paths inject a real
@@ -191,6 +221,14 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         }
     }
 
+    private func rendererDescription() -> String {
+        let march = "march \(configuration.marchWidth) by \(configuration.marchHeight)"
+        if let upscaler {
+            return "\(march), metalfx temporal to \(upscaler.outputWidth) by \(upscaler.outputHeight)"
+        }
+        return "\(march), native"
+    }
+
     /// Switch presets live. A preset that fails the budget, or the gated max
     /// preset without its launch flag, is refused in one sentence and the
     /// program stays where it is.
@@ -210,6 +248,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         system = ParticleSystem(context: context, count: next.particles, seed: system.seed, potential: .paczynskiWiita)
         volume = Volume(context: context, size: next.volume)
         marchPass.resize(width: next.marchWidth, height: next.marchHeight)
+        upscaler = nil
         let clear = context.makeCommandBuffer(label: "clear volume")
         volume.encodeClear(clear)
         clear.commit()
@@ -235,6 +274,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         case .reseed:
             system.reseed(system.seed &+ 1)
             needsSeed = true
+            upscaler?.reset()
         case .screenshot:
             screenshotRequested = true
         case .hud:

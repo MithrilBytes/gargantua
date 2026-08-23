@@ -14,6 +14,8 @@ final class MarchPass {
     private let context: GpuContext
     private(set) var output: MTLTexture?
     private(set) var debug: MTLTexture?
+    private(set) var depth: MTLTexture?
+    private(set) var motion: MTLTexture?
     private var counters: [MTLBuffer] = []
     private var counterSlot = 0
 
@@ -28,11 +30,21 @@ final class MarchPass {
         }
     }
 
-    static func makeTargets(context: GpuContext, width: Int, height: Int, label: String) -> (output: MTLTexture, debug: MTLTexture) {
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: pixelFormat, width: max(width, 1), height: max(height, 1), mipmapped: false)
-        descriptor.usage = [.shaderWrite, .shaderRead]
-        descriptor.storageMode = .private
-        return (context.makeTexture(descriptor, label: "\(label) output"), context.makeTexture(descriptor, label: "\(label) debug"))
+    struct Targets {
+        let output: MTLTexture
+        let debug: MTLTexture
+        let depth: MTLTexture
+        let motion: MTLTexture
+    }
+
+    static func makeTargets(context: GpuContext, width: Int, height: Int, label: String) -> Targets {
+        func make(_ format: MTLPixelFormat, _ name: String) -> MTLTexture {
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: format, width: max(width, 1), height: max(height, 1), mipmapped: false)
+            descriptor.usage = [.shaderWrite, .shaderRead, .renderTarget]
+            descriptor.storageMode = .private
+            return context.makeTexture(descriptor, label: "\(label) \(name)")
+        }
+        return Targets(output: make(pixelFormat, "output"), debug: make(pixelFormat, "debug"), depth: make(.r32Float, "depth"), motion: make(.rg16Float, "motion"))
     }
 
     func resize(width: Int, height: Int) {
@@ -40,6 +52,8 @@ final class MarchPass {
         let targets = MarchPass.makeTargets(context: context, width: width, height: height, label: "march")
         output = targets.output
         debug = targets.debug
+        depth = targets.depth
+        motion = targets.motion
     }
 
     static func settings(_ s: Schwarzschild.Settings) -> GeodesicSettings {
@@ -48,9 +62,11 @@ final class MarchPass {
                          stepCap: UInt32(s.stepCap), padding0: 0, padding1: 0)
     }
 
-    static func uniforms(camera: OrbitCamera, width: Int, height: Int, tileOrigin: (Int, Int) = (0, 0),
+    static func uniforms(camera: OrbitCamera, previous: OrbitCamera? = nil, jitter: SIMD2<Float> = SIMD2(0, 0),
+                         width: Int, height: Int, tileOrigin: (Int, Int) = (0, 0),
                          settings: Schwarzschild.Settings, driftBudget: Double, redshift: Bool, starSeed: UInt32, stars: Bool = true) -> MarchUniforms {
         let tanHalf = tan(camera.fovY * 0.5)
+        let before = previous ?? camera
         return MarchUniforms(
             cameraPosition: camera.position,
             cameraRight: camera.right,
@@ -65,27 +81,33 @@ final class MarchPass {
             driftBudget: Float(driftBudget),
             starSeed: starSeed,
             redshift: redshift ? 1 : 0,
-            padding0: 0, padding1: 0,
+            jitter: jitter,
+            previousPosition: before.position,
+            previousRight: before.right,
+            previousUp: before.up,
+            previousForward: before.forward,
             geodesic: MarchPass.settings(settings))
     }
 
     /// Render a tile (or the whole image when the targets cover it).
     func encodeImage(_ commandBuffer: MTLCommandBuffer, uniforms: MarchUniforms, volume: Volume, blackbody: MTLTexture,
-                     output: MTLTexture, debug: MTLTexture, counters: MTLBuffer?) {
+                     targets: Targets, counters: MTLBuffer?) {
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
             Exit.operational("Metal could not create the march encoder.")
         }
         encoder.label = "march"
         var u = uniforms
         encoder.setComputePipelineState(image)
-        encoder.setTexture(output, index: 0)
-        encoder.setTexture(debug, index: 1)
+        encoder.setTexture(targets.output, index: 0)
+        encoder.setTexture(targets.debug, index: 1)
         encoder.setTexture(volume.emission, index: 2)
         encoder.setTexture(volume.velocity, index: 3)
         encoder.setTexture(blackbody, index: 4)
+        encoder.setTexture(targets.depth, index: 5)
+        encoder.setTexture(targets.motion, index: 6)
         encoder.setBytes(&u, length: MemoryLayout<MarchUniforms>.stride, index: 0)
         encoder.setBuffer(counters ?? self.counters[0], offset: 0, index: 1)
-        encoder.dispatchThreads(MTLSize(width: output.width, height: output.height, depth: 1),
+        encoder.dispatchThreads(MTLSize(width: targets.output.width, height: targets.output.height, depth: 1),
                                 threadsPerThreadgroup: MTLSize(width: 32, height: 4, depth: 1))
         encoder.endEncoding()
     }
@@ -93,9 +115,10 @@ final class MarchPass {
     /// Interactive frame: rotates through the counter ring so the CPU reads
     /// a buffer the GPU finished frames ago.
     func encodeFrame(_ commandBuffer: MTLCommandBuffer, uniforms: MarchUniforms, volume: Volume, blackbody: MTLTexture) {
-        guard let output, let debug else { return }
+        guard let output, let debug, let depth, let motion else { return }
         let slot = counters[counterSlot]
-        encodeImage(commandBuffer, uniforms: uniforms, volume: volume, blackbody: blackbody, output: output, debug: debug, counters: slot)
+        encodeImage(commandBuffer, uniforms: uniforms, volume: volume, blackbody: blackbody,
+                    targets: Targets(output: output, debug: debug, depth: depth, motion: motion), counters: slot)
         counterSlot = (counterSlot + 1) % counters.count
     }
 

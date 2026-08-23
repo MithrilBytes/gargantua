@@ -11,6 +11,7 @@ struct HudState {
     var paused: Bool
     var gpuErrors: UInt64
     var validation: String
+    var renderer: String
 }
 
 enum Hud {
@@ -21,6 +22,7 @@ enum Hud {
             "gargantua  \(state.preset)  \(particles) particles  seed \(state.seed)",
             String(format: "%.1f fps  frame %.2f ms  gpu %.2f ms  %@", state.fps, state.cpuMilliseconds, state.gpuMilliseconds, status),
             "errors \(state.gpuErrors)  validation \(state.validation)",
+            state.renderer,
         ]
     }
 }

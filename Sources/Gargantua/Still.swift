@@ -52,8 +52,7 @@ enum Still {
                 let uniforms = MarchPass.uniforms(camera: camera, width: width, height: height, tileOrigin: origin, settings: .still,
                                                   driftBudget: Constants.driftBudgetStill.value, redshift: true, starSeed: UInt32(truncatingIfNeeded: configuration.seed))
                 let commandBuffer = context.makeCommandBuffer(label: "still tile")
-                marchPass.encodeImage(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody,
-                                      output: targets.output, debug: targets.debug, counters: nil)
+                marchPass.encodeImage(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody, targets: targets, counters: nil)
                 guard let blit = commandBuffer.makeBlitCommandEncoder() else {
                     Exit.operational("Metal could not create the tile copy encoder.")
                 }

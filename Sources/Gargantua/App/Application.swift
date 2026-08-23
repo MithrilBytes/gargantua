@@ -34,7 +34,8 @@ final class Application: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.delegate = self
         window.center()
         let view = SimulationView(frame: frame, device: context.device)
-        let renderer = Renderer(context: context, view: view, options: options)
+        let scale = window.backingScaleFactor
+        let renderer = Renderer(context: context, view: view, options: options, estimatedDrawable: (Int(width * scale), Int(height * scale)))
         view.delegate = renderer
         view.input = renderer
         window.contentView = view
