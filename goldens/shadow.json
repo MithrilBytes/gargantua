@@ -1,0 +1,9 @@
+{
+  "name": "shadow",
+  "claim": "bisected capture boundary sits at b_c = 5.196",
+  "kind": "relative",
+  "expected": 5.196152422706632,
+  "tolerance": 0.01,
+  "method": "Launch rays toward the hole from launchRadius with impact parameters spanning the bracket [bracketLow, bracketHigh], find where captured turns into escaped, narrow the bracket to that interval and repeat for rounds rounds with raysPerRound rays each, using the still step cap. A ray that exhausts its steps sits on the boundary and ends the search.",
+  "parameters": { "launchRadius": 50, "bracketLow": 3, "bracketHigh": 8, "raysPerRound": 64, "rounds": 4 }
+}

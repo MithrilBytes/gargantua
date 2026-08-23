@@ -1,0 +1,9 @@
+{
+  "name": "conservation_interactive",
+  "claim": "per ray E and L relative drift, 256 step interactive",
+  "kind": "absolute",
+  "expected": 0,
+  "tolerance": 0.0001,
+  "method": "Integrate a columns by rows grid of rays across the default camera view with the interactive step policy and report the largest relative deviation of E or L from the launch values over all rays.",
+  "parameters": { "columns": 16, "rows": 16 }
+}
