@@ -24,7 +24,9 @@ enum SyntheticDisk {
                     let color = Blackbody.normalizedColor(temperature: t)
                     let i = (z * size + y) * size + x
                     emission[i] = SIMD4(color.x, color.y, color.z, 1.0) * pow(relative, 4.0)
-                    emission[i].w = 1.0
+                    // Dense gas, above the beaming density floor, so the
+                    // moving disk test exercises full Doppler beaming.
+                    emission[i].w = 100.0
                     if moving {
                         let v = Potential.paczynskiWiita.circularSpeed(r)
                         velocity[i] = SIMD3(-v * p.y / r, v * p.x / r, 0.0)

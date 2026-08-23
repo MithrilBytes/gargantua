@@ -62,7 +62,9 @@ public enum LensedRender {
                     var g3 = 1.0
                     if shading.redshift {
                         let g = Schwarzschild.redshiftFactor(radius: ray.state.r, direction: ray.direction, gas: s.velocity)
-                        g3 = g * g * g
+                        let gravity = max(Schwarzschild.f(ray.state.r), 0.0).squareRoot()
+                        let bulk = min(s.density / Constants.beamingDensityFloor.value, 1.0)
+                        g3 = gravity * gravity * gravity * (1.0 - bulk) + g * g * g * bulk
                     }
                     let alpha = 1.0 - exp(-shading.opacity * s.density * pathLength)
                     color += transmittance * s.emission * g3 * pathLength
