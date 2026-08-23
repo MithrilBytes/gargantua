@@ -212,8 +212,9 @@ were read.
 A march frame is 38 ms and a walked frame 8 ms on this machine; the base M1
 has half the GPU cores. The march line is the one the optimization campaign
 attacks; the lanes and their measurements land as dated writeups in
-`docs/lab/`. The first lane, sweep tables outside the integration sphere,
-took the march to 17.0 ms and the frame to 24.1 ms. Reports from `bench` are committed in `bench/results/`
+`docs/lab/`. Three lanes so far: sweep tables outside the integration
+sphere, a coarser step policy on the empty legs of each ray, and 8 by 8
+threadgroups took the march to 10.7 ms and the frame to 16.9 ms. Reports from `bench` are committed in `bench/results/`
 alongside the change they measure, and a regression is caught by reading
 two files side by side.
 
