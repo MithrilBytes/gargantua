@@ -49,7 +49,7 @@ public enum Constants {
     static let bardeen = "Bardeen, J. M., Press, W. H. and Teukolsky, S. A., 1972. Rotating black holes: locally nonrotating frames, energy extraction, and scalar synchrotron radiation. ApJ 178, 347."
     static let paczynskiWiita = "Paczynski, B. and Wiita, P. J., 1980. Thick accretion disks and supercritical luminosities. A&A 88, 23."
     static let shakuraSunyaev = "Shakura, N. I. and Sunyaev, R. A., 1973. Black holes in binary systems. A&A 24, 337."
-    static let design = "gargantua design choice, see note."
+    public static let design = "gargantua design choice, see note."
 
     // MARK: Schwarzschild geometry
 
@@ -145,7 +145,7 @@ public enum Constants {
         note: "Stylized. Peak of the thin disk temperature profile in kelvin; real disks peak far hotter than a monitor can show.")
 
     public static let zeroTorqueFloor = Constant<Double>(
-        "ZERO_TORQUE_FLOOR", 0.002,
+        "ZERO_TORQUE_FLOOR", 0.01,
         source: design,
         note: "Stylized. Floor on the zero torque factor 1 - sqrt(r_isco / r) so gas inside the innermost stable orbit keeps a finite, cooler temperature instead of vanishing.")
 

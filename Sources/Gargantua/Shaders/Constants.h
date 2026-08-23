@@ -73,7 +73,7 @@
 
 // Stylized. Floor on the zero torque factor 1 - sqrt(r_isco / r) so gas inside the innermost stable orbit keeps a finite, cooler temperature instead of vanishing.
 // Source: gargantua design choice, see note.
-#define ZERO_TORQUE_FLOOR (0.002f)
+#define ZERO_TORQUE_FLOOR (0.01f)
 
 // Lowest temperature in the blackbody color table, kelvin. The table is log spaced.
 // Source: gargantua design choice, see note.

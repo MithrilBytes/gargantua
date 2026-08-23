@@ -61,7 +61,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         presentPass = PresentPass(context: context, pixelFormat: view.colorPixelFormat)
         capture = Capture(context: context, presentPass: presentPass, pixelFormat: view.colorPixelFormat)
         hudRenderer = HudRenderer(device: context.device)
-        system = ParticleSystem(context: context, count: configuration.particles, seed: configuration.seed, potential: .newtonian)
+        system = ParticleSystem(context: context, count: configuration.particles, seed: configuration.seed, potential: .paczynskiWiita)
         if let seconds = options.soakSeconds {
             soak = Soak(start: CACurrentMediaTime(), seconds: seconds)
             stats.recording = true
