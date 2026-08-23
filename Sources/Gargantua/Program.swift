@@ -16,7 +16,7 @@ enum Program {
         case .still(let path):
             Still.render(options, path: path)
         case .bench:
-            Exit.operational("The bench subcommand arrives in a later milestone.")
+            Bench.run(options)
         case .validate:
             Validate.run(options)
         }
