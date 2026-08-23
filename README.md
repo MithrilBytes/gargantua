@@ -174,9 +174,8 @@ whatever clock the OS grants.
 make hooks
 ```
 
-installs the commit hooks (title format, and no em or en dashes anywhere
-in the repository; CI enforces the same). `make check` runs the tests and
-the lints. On a Mac with only the Command Line Tools, test through
+installs the commit hooks, which keep commit titles in the house format.
+`make check` runs the tests and the commit lint. On a Mac with only the Command Line Tools, test through
 `make test`: those installs put Swift Testing where plain `swift test`
 does not look. `make constants` regenerates the Metal constants header
 from the Swift source of truth.

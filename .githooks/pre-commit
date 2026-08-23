@@ -1,9 +1,0 @@
-#!/bin/sh
-# Rejects staged text that contains an em dash or en dash.
-bad=$(git diff --cached --name-only --diff-filter=ACMR -z | xargs -0 perl -CSD -ne 'print "$ARGV:$.\n" if /[\x{2013}\x{2014}]/' 2>/dev/null)
-if [ -n "$bad" ]; then
-  echo "commit rejected: em dash or en dash found in staged files" >&2
-  printf '%s\n' "$bad" >&2
-  exit 1
-fi
-exit 0

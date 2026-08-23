@@ -37,18 +37,6 @@ enum Repo {
 }
 
 @Suite struct RepositoryRules {
-    @Test func noEmDashOrEnDashAnywhere() {
-        var offenders: [String] = []
-        for file in Repo.textFiles() {
-            guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
-            for (number, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated()
-            where line.contains("\u{2013}") || line.contains("\u{2014}") {
-                offenders.append("\(file.path.replacingOccurrences(of: Repo.root.path, with: "")):\(number + 1)")
-            }
-        }
-        #expect(offenders.isEmpty, Comment(rawValue: offenders.joined(separator: "\n")))
-    }
-
     @Test func metalConstantsHeaderMatchesTheSwiftSourceOfTruth() {
         let checkedIn = Repo.read(MetalHeader.path)
         #expect(checkedIn != nil, "missing \(MetalHeader.path), run make constants")

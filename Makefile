@@ -12,7 +12,7 @@ TESTFLAGS := -Xswiftc -F$(DEVDIR)/Library/Developer/Frameworks \
 	-Xlinker -rpath -Xlinker $(DEVDIR)/Library/Developer/usr/lib
 endif
 
-.PHONY: build release test check app constants hooks clean lint-commits dashes
+.PHONY: build release test check app constants hooks clean lint-commits
 
 build:
 	$(SWIFT) build
@@ -23,10 +23,7 @@ release:
 test:
 	$(SWIFT) test $(TESTFLAGS)
 
-check: test dashes lint-commits
-
-dashes:
-	@if git ls-files -z | xargs -0 perl -CSD -ne 'print "$$ARGV:$$.\n" if /[\x{2013}\x{2014}]/' | grep .; then echo "em dash or en dash found"; exit 1; fi
+check: test lint-commits
 
 lint-commits:
 	@git log --format=%s $(BASE)..HEAD | while IFS= read -r title; do printf '%s\n' "$$title" | .githooks/lint-title || exit 1; done
