@@ -14,7 +14,7 @@ final class Volume {
     init(context: GpuContext, size: Int) {
         self.size = size
         let voxels = size * size * size
-        emissionSums = context.makeBuffer(bytes: voxels * 3 * 4, label: "emission sums")
+        emissionSums = context.makeBuffer(bytes: voxels * 2 * 4, label: "emission sums")
         momentumSums = context.makeBuffer(bytes: voxels * 3 * 4, label: "momentum sums")
         massSums = context.makeBuffer(bytes: voxels * 4, label: "mass sums")
         let descriptor = MTLTextureDescriptor()

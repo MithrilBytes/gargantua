@@ -50,7 +50,7 @@ struct Configuration: Sendable {
             ("particles", UInt64(particles) * Configuration.particleStride),
             ("seeding table", UInt64(Configuration.inverseCdfCount) * 4),
             ("blackbody table", UInt64(Constants.blackbodyTableSize.value) * 8),
-            ("volume sums", voxels * 7 * 4),
+            ("volume sums", voxels * 6 * 4),
             ("emission volume", voxels * 8),
             ("velocity volume", voxels * 8),
             ("march target", pixels * 8),

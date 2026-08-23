@@ -47,7 +47,7 @@ enum Bench {
     /// the campaign writeups. Each policy is timed on the march and judged
     /// on conserved quantity drift over a grid of camera rays.
     static func sweep(context: GpuContext, marchPass: MarchPass, volume: Volume, system: ParticleSystem, targets: MarchPass.Targets,
-                      camera: OrbitCamera, width: Int, height: Int, seed: UInt64) -> Never {
+                      camera: OrbitCamera, width: Int, height: Int, seed: UInt64, splatPassForSweep: SplatPass? = nil) -> Never {
         let probes = Probes(context: context, marchPass: marchPass, volume: volume, blackbody: system.blackbody)
         let cap = Int(Constants.stepCapInteractive.value)
         func policy(_ name: String, factor: Double, min: Double, max: Double, emptyFactor: Double? = nil, emptyMax: Double? = nil) -> (String, Schwarzschild.Settings) {
@@ -104,6 +104,11 @@ enum Bench {
             }
             Console.line(Validate.pad(name, 38) + String(format: "  %8.2f  %9.2e  %9.2e  %9d  %9.2e", timing.mean * 1000, drifts.last ?? 0, p99, exhausted, difference / total))
         }
+        Console.line("splat phase breakdown")
+        let binTiming = Bench.time(context: context, iterations: 15) { splatPassForSweep!.encodeBin($0, system: system, volume: volume) }
+        Console.line(String(format: "bin      %7.2f ms", binTiming.mean * 1000))
+        let resolveTiming = Bench.time(context: context, iterations: 15) { splatPassForSweep!.encodeResolve($0, system: system, volume: volume) }
+        Console.line(String(format: "resolve  %7.2f ms", resolveTiming.mean * 1000))
         Console.line("threadgroup sweep at the spec policy")
         let spec = MarchPass.uniforms(camera: camera, width: width, height: height, settings: .interactive,
                                       driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
@@ -174,7 +179,7 @@ enum Bench {
             splat.commit()
             splat.waitUntilCompleted()
             sweep(context: context, marchPass: marchPass, volume: volume, system: system, targets: targets, camera: camera,
-                  width: width, height: height, seed: configuration.seed)
+                  width: width, height: height, seed: configuration.seed, splatPassForSweep: splatPass)
         }
 
         Console.line("timing \(iterations) iterations per pass after \(warmup) warmups, \(width) by \(height) march, \(outputWidth) by \(outputHeight) output")
