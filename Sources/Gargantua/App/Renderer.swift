@@ -156,7 +156,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         }
         let jitter = (upscaler != nil && !walking) ? Jitter.offset(frame: frameIndex) : SIMD2<Float>(0, 0)
         frameIndex += 1
-        let uniforms = MarchPass.uniforms(camera: camera, previous: previousCamera, jitter: jitter, width: hdr.width, height: hdr.height,
+        let uniforms = MarchPass.uniforms(camera: camera, jitter: jitter, width: hdr.width, height: hdr.height,
                                           settings: .interactive, driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
                                           starSeed: UInt32(truncatingIfNeeded: system.seed),
                                           bakeSpacing: bakePass?.spacing(volumeSize: volume.size) ?? 0, tables: marchPass.tables)

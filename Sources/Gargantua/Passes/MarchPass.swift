@@ -64,12 +64,11 @@ final class MarchPass {
                          stepCap: UInt32(s.stepCap), emptyStepFactor: Float(s.emptyStepFactor), emptyStepMax: Float(min(s.emptyStepMax, 1e9)))
     }
 
-    static func uniforms(camera: OrbitCamera, previous: OrbitCamera? = nil, jitter: SIMD2<Float> = SIMD2(0, 0),
+    static func uniforms(camera: OrbitCamera, jitter: SIMD2<Float> = SIMD2(0, 0),
                          width: Int, height: Int, tileOrigin: (Int, Int) = (0, 0),
                          settings: Schwarzschild.Settings, driftBudget: Double, redshift: Bool, starSeed: UInt32, stars: Bool = true,
                          bakeSpacing: Float = 0, tables: DeflectionTables? = nil) -> MarchUniforms {
         let tanHalf = tan(camera.fovY * 0.5)
-        let before = previous ?? camera
         var uniforms = MarchUniforms(
             cameraPosition: camera.position,
             cameraRight: camera.right,
@@ -88,10 +87,6 @@ final class MarchPass {
             bakeCapacity: Constants.bakeSamples.value,
             sphereRadius: 0, cameraRadius: 0, sphereMaxB: 0, sphereTableMaxB: 0, cameraMaxB: 0, skyMinB: 0, skyMaxB: 0, padding2: 0,
             jitter: jitter,
-            previousPosition: before.position,
-            previousRight: before.right,
-            previousUp: before.up,
-            previousForward: before.forward,
             geodesic: MarchPass.settings(settings))
         if let tables {
             tables.update(cameraRadius: Double(camera.distance))

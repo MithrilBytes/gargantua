@@ -139,11 +139,6 @@ typedef struct {
     float padding2;
     /// Subpixel sample offset in input pixels, for temporal upscaling.
     simd_float2 jitter;
-    /// Previous frame's camera, for motion vectors by straight line reprojection.
-    simd_float3 previousPosition;
-    simd_float3 previousRight;
-    simd_float3 previousUp;
-    simd_float3 previousForward;
     GeodesicSettings geodesic;
 } MarchUniforms;
 

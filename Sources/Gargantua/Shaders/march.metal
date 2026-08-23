@@ -83,7 +83,12 @@ static MarchResult marchRay(PlaneRay launched, constant MarchUniforms& u, bool g
                 float g3 = 1.0f;
                 if (u.redshift != 0u) {
                     float g = redshiftFactor(schwarzschildF(ray.s.r), rayDirection(ray), s.velocity);
-                    g3 = g * g * g;
+                    float gravity = sqrt(max(schwarzschildF(ray.s.r), 0.0f));
+                    // Sparse voxels have no meaningful bulk velocity; blend
+                    // their Doppler factor away so lone particles do not
+                    // strobe as their velocity sweeps the camera direction.
+                    float bulk = min(s.density / BEAMING_DENSITY_FLOOR, 1.0f);
+                    g3 = mix(gravity * gravity * gravity, g * g * g, bulk);
                 }
                 float alpha = 1.0f - exp(-u.opacityScale * s.density * pathLength);
                 float3 contribution = transmittance * s.emission * g3 * pathLength;
@@ -116,17 +121,6 @@ static MarchResult marchRay(PlaneRay launched, constant MarchUniforms& u, bool g
 static inline float3 skyDirection(PlaneRay ray, MarchResult m, constant MarchUniforms& u,
                                   texture1d<float, access::sample> sphereSweep) {
     return m.leftSphere ? sphereExitDirection(ray, u, sphereSweep) : rayDirection(ray);
-}
-
-// Pixel position of a world point in the previous frame's camera, for the
-// temporal upscaler. Straight line reprojection; the lensing makes it an
-// approximation, which shows as ghosting during fast camera moves.
-static float2 previousPixel(float3 point, constant MarchUniforms& u) {
-    float3 d = point - u.previousPosition;
-    float z = max(dot(d, u.previousForward), 1e-3f);
-    float sx = dot(d, u.previousRight) / z / u.tanHalfFov.x;
-    float sy = dot(d, u.previousUp) / z / u.tanHalfFov.y;
-    return float2(0.5f * (sx + 1.0f) * float(u.resolution.x), 0.5f * (1.0f - sy) * float(u.resolution.y));
 }
 
 kernel void marchImage(texture2d<half, access::write> output [[texture(0)]],
@@ -172,8 +166,10 @@ kernel void marchImage(texture2d<half, access::write> output [[texture(0)]],
         }
         output.write(half4(half3(color), 1.0h), local);
         debug.write(half4(half(drift), half(float(steps)), half(float(outcome)), 1.0h), local);
-        float3 point = u.cameraPosition + direction * depth;
-        float2 motion = previousPixel(point, u) - (float2(pixel) + 0.5f);
+        // Zero motion vectors: a ground truth comparison under camera orbit
+        // (docs/lab/06) preferred them to every reprojection tried, because
+        // most pixels mix lensed gas and sky, which move differently.
+        float2 motion = float2(0.0f);
         depthOut.write(float4(min(depth / (2.0f * R_ESCAPE), 1.0f), 0.0f, 0.0f, 0.0f), local);
         motionOut.write(half4(half2(motion), 0.0h, 0.0h), local);
     }
