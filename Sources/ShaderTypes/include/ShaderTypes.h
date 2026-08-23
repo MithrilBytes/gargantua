@@ -118,6 +118,9 @@ typedef struct {
     float driftBudget;
     unsigned int starSeed;
     unsigned int redshift;
+    /// Minimum path length between stored samples when baking.
+    float bakeSpacing;
+    unsigned int bakeCapacity;
     /// Subpixel sample offset in input pixels, for temporal upscaling.
     simd_float2 jitter;
     /// Previous frame's camera, for motion vectors by straight line reprojection.
@@ -127,6 +130,16 @@ typedef struct {
     simd_float3 previousForward;
     GeodesicSettings geodesic;
 } MarchUniforms;
+
+/// One baked ray: how many samples it stored and how it ended.
+typedef struct {
+    unsigned int count;
+    /// 1 when the ray falls into the hole, 0 when it sees the sky.
+    unsigned int fallsIn;
+    /// Final direction as three halves plus depth as a half, packed.
+    unsigned int directionXY;
+    unsigned int directionZDepth;
+} BakedRay;
 
 /// Per frame ray statistics, summed by the march kernel.
 typedef struct {

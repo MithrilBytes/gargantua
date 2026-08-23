@@ -55,6 +55,9 @@ struct Configuration: Sendable {
             ("velocity volume", voxels * 8),
             ("march target", pixels * 8),
             ("debug target", pixels * 8),
+            ("depth and motion", pixels * 8),
+            ("bake samples", strategy == .bake ? pixels * UInt64(Constants.bakeSamples.value) * 8 : 0),
+            ("bake headers", strategy == .bake ? pixels * 16 : 0),
         ]
     }
 

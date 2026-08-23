@@ -64,7 +64,8 @@ final class MarchPass {
 
     static func uniforms(camera: OrbitCamera, previous: OrbitCamera? = nil, jitter: SIMD2<Float> = SIMD2(0, 0),
                          width: Int, height: Int, tileOrigin: (Int, Int) = (0, 0),
-                         settings: Schwarzschild.Settings, driftBudget: Double, redshift: Bool, starSeed: UInt32, stars: Bool = true) -> MarchUniforms {
+                         settings: Schwarzschild.Settings, driftBudget: Double, redshift: Bool, starSeed: UInt32, stars: Bool = true,
+                         bakeSpacing: Float = 0) -> MarchUniforms {
         let tanHalf = tan(camera.fovY * 0.5)
         let before = previous ?? camera
         return MarchUniforms(
@@ -81,6 +82,8 @@ final class MarchPass {
             driftBudget: Float(driftBudget),
             starSeed: starSeed,
             redshift: redshift ? 1 : 0,
+            bakeSpacing: bakeSpacing,
+            bakeCapacity: Constants.bakeSamples.value,
             jitter: jitter,
             previousPosition: before.position,
             previousRight: before.right,
@@ -114,11 +117,15 @@ final class MarchPass {
 
     /// Interactive frame: rotates through the counter ring so the CPU reads
     /// a buffer the GPU finished frames ago.
+    var targets: Targets? {
+        guard let output, let debug, let depth, let motion else { return nil }
+        return Targets(output: output, debug: debug, depth: depth, motion: motion)
+    }
+
     func encodeFrame(_ commandBuffer: MTLCommandBuffer, uniforms: MarchUniforms, volume: Volume, blackbody: MTLTexture) {
-        guard let output, let debug, let depth, let motion else { return }
+        guard let targets else { return }
         let slot = counters[counterSlot]
-        encodeImage(commandBuffer, uniforms: uniforms, volume: volume, blackbody: blackbody,
-                    targets: Targets(output: output, debug: debug, depth: depth, motion: motion), counters: slot)
+        encodeImage(commandBuffer, uniforms: uniforms, volume: volume, blackbody: blackbody, targets: targets, counters: slot)
         counterSlot = (counterSlot + 1) % counters.count
     }
 

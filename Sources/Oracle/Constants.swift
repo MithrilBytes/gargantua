@@ -194,6 +194,16 @@ public enum Constants {
         source: design,
         note: "Stored samples per ray inside the volume cube for the bake strategy.")
 
+    public static let bakeSpacingVoxels = Constant<Double>(
+        "BAKE_SPACING_VOXELS", 0.5,
+        source: design,
+        note: "Minimum path length between stored bake samples, in voxels, so small steps near the hole do not exhaust the sample budget on one voxel.")
+
+    public static let bakeFrames = Constant<UInt32>(
+        "BAKE_FRAMES", 4,
+        source: design,
+        note: "Frames a progressive rebake is spread across after the camera stops moving.")
+
     public static let driftBudgetInteractive = Constant<Double>(
         "DRIFT_BUDGET_INTERACTIVE", 1e-4,
         source: design,
@@ -264,7 +274,7 @@ public enum Constants {
         captureRadius, escapeRadius, diskOuterRadius, feedInnerRadius, diskSlabHalfHeight, volumeHalfExtent,
         simulationTimestep, simulationSubsteps, dragAlpha, feedVelocityDispersion, diskAspectRatio,
         peakTemperature, zeroTorqueFloor, blackbodyMinTemperature, blackbodyMaxTemperature, blackbodyTableSize,
-        stepCapInteractive, stepCapStill, stepRadiusFactor, stepMin, stepMax, bakeSamples,
+        stepCapInteractive, stepCapStill, stepRadiusFactor, stepMin, stepMax, bakeSamples, bakeSpacingVoxels, bakeFrames,
         driftBudgetInteractive, driftBudgetStill,
         exposure, emissionScale, gasSpeedCeiling, volumeOpacity, starBrightness, stillSettleSteps, stillTile,
         commandBufferBudgetMilliseconds, memoryBudgetFraction, memoryBudgetCapBytes,

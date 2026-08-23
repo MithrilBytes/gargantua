@@ -115,6 +115,14 @@
 // Source: gargantua design choice, see note.
 #define BAKE_SAMPLES (96u)
 
+// Minimum path length between stored bake samples, in voxels, so small steps near the hole do not exhaust the sample budget on one voxel.
+// Source: gargantua design choice, see note.
+#define BAKE_SPACING_VOXELS (0.5f)
+
+// Frames a progressive rebake is spread across after the camera stops moving.
+// Source: gargantua design choice, see note.
+#define BAKE_FRAMES (4u)
+
 // Allowed relative drift of a ray's conserved energy and angular momentum over a 256 step integration.
 // Source: gargantua design choice, see note.
 #define DRIFT_BUDGET_INTERACTIVE (0.0001f)

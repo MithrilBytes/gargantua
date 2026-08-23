@@ -19,11 +19,13 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
     private let simPass: SimPass
     private let splatPass: SplatPass
     private let marchPass: MarchPass
+    private let bakePass: BakePass?
     private let presentPass: PresentPass
     private var volume: Volume
     private var upscaler: Upscaler?
     private var previousCamera: OrbitCamera?
     private var frameIndex = 0
+    private var walkedLastFrame = false
     private var upscaleWanted: Bool
     private let capture: Capture
     private let hudRenderer: HudRenderer
@@ -67,6 +69,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         simPass = SimPass(context: context)
         splatPass = SplatPass(context: context)
         marchPass = MarchPass(context: context)
+        bakePass = configuration.strategy == .bake ? BakePass(context: context) : nil
         presentPass = PresentPass(context: context, pixelFormat: view.colorPixelFormat)
         volume = Volume(context: context, size: configuration.volume)
         capture = Capture(context: context, presentPass: presentPass, pixelFormat: view.colorPixelFormat)
@@ -79,6 +82,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         presentPass.exposure = Float(Constants.exposure.value)
         super.init()
         marchPass.resize(width: configuration.marchWidth, height: configuration.marchHeight)
+        bakePass?.resize(width: configuration.marchWidth, height: configuration.marchHeight)
         rebuildUpscaler(width: estimatedDrawable.0, height: estimatedDrawable.1)
         let clear = context.makeCommandBuffer(label: "clear volume")
         volume.encodeClear(clear)
@@ -139,13 +143,37 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         if upscaler == nil, upscaleWanted {
             rebuildUpscaler(width: drawable.texture.width, height: drawable.texture.height)
         }
-        let jitter = upscaler != nil ? Jitter.offset(frame: frameIndex) : SIMD2<Float>(0, 0)
+        // The bake strategy walks stored samples while the camera holds
+        // still, marches while it moves, and rebakes progressively once it
+        // stops. Walked frames carry no jitter, so the upscaler simply
+        // accumulates them.
+        let cameraMoved = previousCamera != nil && previousCamera != camera
+        var walking = false
+        if let bakePass {
+            if cameraMoved { bakePass.invalidate() }
+            if bakePass.complete, bakePass.bakedCamera == camera { walking = true }
+        }
+        let jitter = (upscaler != nil && !walking) ? Jitter.offset(frame: frameIndex) : SIMD2<Float>(0, 0)
         frameIndex += 1
         let uniforms = MarchPass.uniforms(camera: camera, previous: previousCamera, jitter: jitter, width: hdr.width, height: hdr.height,
                                           settings: .interactive, driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
-                                          starSeed: UInt32(truncatingIfNeeded: system.seed))
+                                          starSeed: UInt32(truncatingIfNeeded: system.seed),
+                                          bakeSpacing: bakePass?.spacing(volumeSize: volume.size) ?? 0)
         previousCamera = camera
-        marchPass.encodeFrame(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody)
+        if walking, let bakePass, let targets = marchPass.targets {
+            bakePass.encodeWalk(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody, targets: targets)
+            if !walkedLastFrame { upscaler?.reset() }
+        } else {
+            marchPass.encodeFrame(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody)
+            if let bakePass, !cameraMoved, !bakePass.complete {
+                var bakeUniforms = uniforms
+                bakeUniforms.jitter = SIMD2(0, 0)
+                bakeUniforms.geodesic = MarchPass.settings(.still)
+                bakePass.encodeBakeChunk(commandBuffer, camera: camera, uniforms: bakeUniforms)
+            }
+            if walkedLastFrame { upscaler?.reset() }
+        }
+        walkedLastFrame = walking
         var presented = hdr
         if let upscaler, let depth = marchPass.depth, let motion = marchPass.motion {
             upscaler.encode(commandBuffer, color: hdr, depth: depth, motion: motion, jitter: jitter)
@@ -222,7 +250,10 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
     }
 
     private func rendererDescription() -> String {
-        let march = "march \(configuration.marchWidth) by \(configuration.marchHeight)"
+        var march = "march \(configuration.marchWidth) by \(configuration.marchHeight)"
+        if let bakePass {
+            march = walkedLastFrame ? "walk of \(configuration.marchWidth) by \(configuration.marchHeight) bake (\(bakePass.overflowCount) rays over budget)" : "march \(configuration.marchWidth) by \(configuration.marchHeight), baking \(bakePass.bakedRows) of \(bakePass.height) rows"
+        }
         if let upscaler {
             return "\(march), metalfx temporal to \(upscaler.outputWidth) by \(upscaler.outputHeight)"
         }
@@ -248,6 +279,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         system = ParticleSystem(context: context, count: next.particles, seed: system.seed, potential: .paczynskiWiita)
         volume = Volume(context: context, size: next.volume)
         marchPass.resize(width: next.marchWidth, height: next.marchHeight)
+        bakePass?.resize(width: next.marchWidth, height: next.marchHeight)
         upscaler = nil
         let clear = context.makeCommandBuffer(label: "clear volume")
         volume.encodeClear(clear)

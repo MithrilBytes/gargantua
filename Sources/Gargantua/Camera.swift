@@ -1,7 +1,7 @@
 import simd
 
 /// Orbit camera looking at the hole. The disk lies in the xy plane with z up.
-struct OrbitCamera {
+struct OrbitCamera: Equatable {
     var azimuth: Float = 0.6
     var elevation: Float = 0.32
     var distance: Float = 52.0

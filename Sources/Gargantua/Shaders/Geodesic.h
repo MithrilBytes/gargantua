@@ -110,4 +110,47 @@ static inline float rayDrift(PlaneRay ray) {
     return max(eDrift, lDrift);
 }
 
+// Procedural stars: a cube map of cells, each holding at most one star
+// whose presence, offset, brightness and temperature come from pcg4d.
+static float3 starfield(float3 direction, uint seed,
+                        texture1d<half, access::sample> blackbody) {
+    constexpr sampler linearClamp(filter::linear, address::clamp_to_edge);
+    float3 a = abs(direction);
+    uint face;
+    float2 st;
+    float major;
+    if (a.x >= a.y && a.x >= a.z) { face = direction.x > 0.0f ? 0u : 1u; st = direction.yz; major = a.x; }
+    else if (a.y >= a.z) { face = direction.y > 0.0f ? 2u : 3u; st = direction.xz; major = a.y; }
+    else { face = direction.z > 0.0f ? 4u : 5u; st = direction.xy; major = a.z; }
+    st = st / major * 0.5f + 0.5f;
+    const float cells = 96.0f;
+    float2 scaled = st * cells;
+    uint2 cell = uint2(min(scaled, cells - 1.0f));
+    uint4 h = pcg4d(uint4(cell.x, cell.y, face, seed));
+    if (h.x > 0x30000000u) return float3(0.0f);
+    float2 offset = float2(unitFloat(h.y), unitFloat(h.z));
+    float2 d = scaled - (float2(cell) + offset);
+    float falloff = exp(-dot(d, d) * 40.0f);
+    float brightness = pow(unitFloat(h.w), 3.0f) * falloff;
+    float temperature = mix(3000.0f, 12000.0f, unitFloat(h.w ^ h.y));
+    float3 tint = float3(blackbody.sample(linearClamp, blackbodyCoordinate(temperature)).rgb);
+    return tint * brightness;
+}
+
+// Total redshift factor g = E_observed / E_emitted for light leaving gas
+// that a static observer sees moving with velocity `gas`, reaching a
+// distant observer: the gravitational factor sqrt(f) times the Doppler
+// factor 1 / (gamma (1 - n . beta)), where n is the photon's direction of
+// travel, opposite to the marched direction. The simulated velocity is treated as
+// that locally measured velocity after a smooth compression below c,
+// because the pseudo Newtonian orbits exceed c inside r of about 4.
+// Mirrors Oracle/Schwarzschild.swift redshiftFactor.
+static inline float redshiftFactor(float f, float3 direction, float3 gas) {
+    float speed = length(gas);
+    float beta = speed > 0.0f ? GAS_SPEED_CEILING * tanh(speed / GAS_SPEED_CEILING) : 0.0f;
+    float3 velocity = speed > 0.0f ? gas * (beta / speed) : float3(0.0f);
+    float gamma = rsqrt(1.0f - beta * beta);
+    return sqrt(max(f, 0.0f)) / (gamma * (1.0f + dot(direction, velocity)));
+}
+
 #endif
