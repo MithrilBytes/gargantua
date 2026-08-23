@@ -18,7 +18,7 @@ enum Program {
         case .bench:
             Exit.operational("The bench subcommand arrives in a later milestone.")
         case .validate:
-            Exit.operational("The validate subcommand arrives in a later milestone.")
+            Validate.run(options)
         }
     }
 }

@@ -1,0 +1,9 @@
+{
+  "name": "isco",
+  "claim": "steady state surface density inner edge sits at r = 6",
+  "kind": "relative",
+  "expected": 6.0,
+  "tolerance": 0.05,
+  "method": "Run the disk from its seed for settlingSteps substeps, bin particle radii in binWidth wide bins between fitInner and fitOuter, weight each bin by 1 / (2 pi r binWidth), fit a straight line through Sigma r^1.5 and report where it crosses zero.",
+  "parameters": { "settlingSteps": 1500, "binWidth": 0.25, "fitInner": 6.5, "fitOuter": 9.0 }
+}

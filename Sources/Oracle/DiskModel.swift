@@ -77,6 +77,35 @@ public enum DiskModel {
         return table
     }
 
+    /// Seed or respawn one particle exactly as the GPU kernel does, in double
+    /// precision. Event 0 seeds from the steady profile; later events respawn
+    /// into the feeding annulus.
+    public static func spawn(index: UInt32, event: UInt32, seed: UInt64, inverseCdf: [Double], potential: Potential) -> ParticleState {
+        let h0 = Hash.draw(seed: seed, index: index, event: event, lane: 0)
+        let h1 = Hash.draw(seed: seed, index: index, event: event, lane: 1)
+        let u0 = Hash.unit(h0.x), u1 = Hash.unit(h0.y), u2 = Hash.unit(h0.z), u3 = Hash.unit(h0.w)
+        let u4 = Hash.unit(h1.x), u5 = Hash.unit(h1.y)
+        let r: Double
+        if event == 0 {
+            let position = u0 * Double(inverseCdf.count - 1)
+            let k = min(Int(position), inverseCdf.count - 2)
+            r = inverseCdf[k] + (position - Double(k)) * (inverseCdf[k + 1] - inverseCdf[k])
+        } else {
+            let inner = feedInner * feedInner
+            let outerSquared = outer * outer
+            r = (inner + (outerSquared - inner) * u0).squareRoot()
+        }
+        let phi = 2.0 * Double.pi * u1
+        let (g0, g1) = Hash.gaussianPair(u2, u3)
+        let (g2, g3) = Hash.gaussianPair(u4, u5)
+        let vc = potential.circularSpeed(r)
+        let dispersion = Constants.feedVelocityDispersion.value
+        let aspect = Constants.diskAspectRatio.value
+        let position = SIMD3(r * cos(phi), r * sin(phi), aspect * r * g0)
+        let velocity = SIMD3(-vc * sin(phi), vc * cos(phi), 0.0) + dispersion * vc * SIMD3(g1, g2, g3)
+        return ParticleState(position: position, velocity: velocity)
+    }
+
     /// A particle on a circular orbit in the equatorial plane.
     public static func circularOrbit(radius r: Double, azimuth phi: Double, potential: Potential) -> ParticleState {
         let v = potential.circularSpeed(r)

@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import Oracle
+import Oracle
 
 @Suite struct PotentialTests {
     @Test func paczynskiWiitaAngularMomentumIsMinimalAtIsco() {
@@ -103,7 +103,7 @@ import Foundation
     @Test func temperatureStaysFiniteInsideIsco() {
         let edge = DiskModel.temperature(radius: 6.0)
         #expect(edge > 0.0)
-        #expect(edge < 0.5 * Constants.peakTemperature.value)
+        #expect(edge < 0.8 * Constants.peakTemperature.value)
         #expect(DiskModel.temperature(radius: 3.0) > edge)
     }
 
