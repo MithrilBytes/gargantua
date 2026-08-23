@@ -1,0 +1,64 @@
+{
+  "bake" : {
+    "bytes" : 406425600,
+    "overflow_rays" : 37284
+  },
+  "date" : "2026-08-23-032205",
+  "device" : "Apple M1 Pro",
+  "frames" : {
+    "bake_ms" : 8.376505553314928,
+    "march_ms" : 37.792381943048291
+  },
+  "iterations" : 30,
+  "march" : [
+    960,
+    540
+  ],
+  "os" : "Version 26.6.1 (Build 25G76)",
+  "output" : [
+    1920,
+    1080
+  ],
+  "particles" : 1000000,
+  "passes" : {
+    "bake" : {
+      "max_ms" : 34.971500004758127,
+      "mean_ms" : 33.860841671412345,
+      "p50_ms" : 33.818958327174187
+    },
+    "march" : {
+      "max_ms" : 32.378333329688758,
+      "mean_ms" : 31.782131944297973,
+      "p50_ms" : 31.742625011247583
+    },
+    "present" : {
+      "max_ms" : 0.10520833893679082,
+      "mean_ms" : 0.090058331261388958,
+      "p50_ms" : 0.088583328761160374
+    },
+    "sim" : {
+      "max_ms" : 0.40583332884125412,
+      "mean_ms" : 0.34867083401574439,
+      "p50_ms" : 0.34212500031571835
+    },
+    "splat" : {
+      "max_ms" : 4.4441666686907411,
+      "mean_ms" : 4.4078402779026264,
+      "p50_ms" : 4.405958330607973
+    },
+    "upscale" : {
+      "max_ms" : 1.2645833339774981,
+      "mean_ms" : 1.16368055557056,
+      "p50_ms" : 1.1309583351248875
+    },
+    "walk" : {
+      "max_ms" : 2.8371666703606024,
+      "mean_ms" : 2.3662555545646078,
+      "p50_ms" : 2.3466666752938181
+    }
+  },
+  "preset" : "default",
+  "verdict" : "march frame 37.8 ms, bake frame 8.4 ms after a 33.9 ms bake per camera stop and 406 MB of samples (37284 rays over the sample budget); the walk is faster while the camera holds still, the march is free to move",
+  "version" : "0.1.0",
+  "volume" : 128
+}

@@ -1,0 +1,9 @@
+{
+  "name": "deflection",
+  "claim": "bending at b = 1000 matches 4/b",
+  "kind": "relative",
+  "expected": 0.004,
+  "tolerance": 0.005,
+  "method": "Launch one ray with impact parameter impactParameter from launchRadius on the x axis, integrate with the still step cap, no step ceiling and escape at launchRadius, and measure the angle between the launch direction and the final direction as seen by static observers.",
+  "parameters": { "impactParameter": 1000, "launchRadius": 50000 }
+}

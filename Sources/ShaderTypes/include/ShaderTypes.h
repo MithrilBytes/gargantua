@@ -52,8 +52,101 @@ typedef struct {
     simd_float4 hudRect;
     float exposure;
     unsigned int hudVisible;
+    unsigned int debugView;
+    float driftBudget;
+} PresentUniforms;
+
+/// Geodesic integration policy, shared by the image kernel and the probes.
+typedef struct {
+    float stepFactor;
+    float stepMin;
+    float stepMax;
+    float captureRadius;
+    float escapeRadius;
+    unsigned int stepCap;
     float padding0;
     float padding1;
-} PresentUniforms;
+} GeodesicSettings;
+
+enum {
+    RayCaptured = 0,
+    RayEscaped = 1,
+    RayExhausted = 2
+};
+
+/// One ray integrated outside the image path, for validation.
+typedef struct {
+    packed3 origin;
+    packed3 direction;
+} RayProbe;
+
+typedef struct {
+    packed3 position;
+    packed3 direction;
+    float drift;
+    unsigned int outcome;
+    unsigned int steps;
+    float energy;
+    float angularMomentum;
+} RayProbeResult;
+
+typedef struct {
+    unsigned int volumeSize;
+    unsigned int particleCount;
+    float halfExtent;
+    float peakTemperature;
+    float emissionScale;
+    float padding0;
+    float padding1;
+    float padding2;
+} SplatUniforms;
+
+typedef struct {
+    simd_float3 cameraPosition;
+    simd_float3 cameraRight;
+    simd_float3 cameraUp;
+    simd_float3 cameraForward;
+    /// tan(fov / 2) scaled by aspect in x.
+    simd_float2 tanHalfFov;
+    /// Full image size in pixels.
+    simd_uint2 resolution;
+    /// Pixel offset of the tile being rendered.
+    simd_uint2 tileOrigin;
+    float volumeHalfExtent;
+    float opacityScale;
+    float starBrightness;
+    float driftBudget;
+    unsigned int starSeed;
+    unsigned int redshift;
+    /// Minimum path length between stored samples when baking.
+    float bakeSpacing;
+    unsigned int bakeCapacity;
+    /// Subpixel sample offset in input pixels, for temporal upscaling.
+    simd_float2 jitter;
+    /// Previous frame's camera, for motion vectors by straight line reprojection.
+    simd_float3 previousPosition;
+    simd_float3 previousRight;
+    simd_float3 previousUp;
+    simd_float3 previousForward;
+    GeodesicSettings geodesic;
+} MarchUniforms;
+
+/// One baked ray: how many samples it stored and how it ended.
+typedef struct {
+    unsigned int count;
+    /// 1 when the ray falls into the hole, 0 when it sees the sky.
+    unsigned int fallsIn;
+    /// Final direction as three halves plus depth as a half, packed.
+    unsigned int directionXY;
+    unsigned int directionZDepth;
+} BakedRay;
+
+/// Per frame ray statistics, summed by the march kernel.
+typedef struct {
+    unsigned int rays;
+    unsigned int overDriftBudget;
+    unsigned int exhausted;
+    unsigned int captured;
+} MarchCounters;
 
 #endif

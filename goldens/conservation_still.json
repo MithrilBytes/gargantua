@@ -1,0 +1,9 @@
+{
+  "name": "conservation_still",
+  "claim": "per ray E and L relative drift, 4096 step still",
+  "kind": "absolute",
+  "expected": 0,
+  "tolerance": 0.00001,
+  "method": "Integrate a columns by rows grid of rays across the default camera view with the still step policy and report the largest relative deviation of E or L from the launch values over all rays.",
+  "parameters": { "columns": 16, "rows": 16 }
+}

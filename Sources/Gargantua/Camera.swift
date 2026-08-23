@@ -1,14 +1,15 @@
 import simd
 
 /// Orbit camera looking at the hole. The disk lies in the xy plane with z up.
-struct OrbitCamera {
+struct OrbitCamera: Equatable {
     var azimuth: Float = 0.6
     var elevation: Float = 0.32
     var distance: Float = 52.0
     var fovY: Float = 50.0 * .pi / 180.0
 
     static let minimumDistance: Float = 6.0
-    static let maximumDistance: Float = 220.0
+    /// Inside the escape radius, so every ray still starts inside the scene.
+    static let maximumDistance: Float = 56.0
     static let near: Float = 0.1
     static let far: Float = 1000.0
 

@@ -43,6 +43,10 @@
 // Source: gargantua design choice, see note.
 #define R_FEED_INNER (20.0f)
 
+// Rays sample the volume only within this height of the disk plane. Seeding puts gas within 0.05 r Gaussian of the plane, so at the outer edge five sigma is 6; vertical oscillation amplitudes are conserved under gravity and shrink under drag.
+// Source: gargantua design choice, see note.
+#define DISK_SLAB_HALF_HEIGHT (6.0f)
+
 // Half width of the cube the splat pass bins particles into, centered on the hole.
 // Source: gargantua design choice, see note.
 #define VOLUME_HALF_EXTENT (30.0f)
@@ -111,6 +115,14 @@
 // Source: gargantua design choice, see note.
 #define BAKE_SAMPLES (96u)
 
+// Minimum path length between stored bake samples, in voxels, so small steps near the hole do not exhaust the sample budget on one voxel.
+// Source: gargantua design choice, see note.
+#define BAKE_SPACING_VOXELS (0.5f)
+
+// Frames a progressive rebake is spread across after the camera stops moving.
+// Source: gargantua design choice, see note.
+#define BAKE_FRAMES (4u)
+
 // Allowed relative drift of a ray's conserved energy and angular momentum over a 256 step integration.
 // Source: gargantua design choice, see note.
 #define DRIFT_BUDGET_INTERACTIVE (0.0001f)
@@ -119,13 +131,33 @@
 // Source: gargantua design choice, see note.
 #define DRIFT_BUDGET_STILL (1e-05f)
 
-// Stylized. World space radius of a particle point sprite.
+// Stylized. Linear scale applied to the lensed image before tone mapping.
 // Source: gargantua design choice, see note.
-#define SPRITE_RADIUS (0.08f)
+#define EXPOSURE_DEFAULT (1.0f)
 
-// Stylized. Linear scale applied to accumulated emission before tone mapping.
+// Stylized. Emission per particle at the peak temperature, per unit volume and path length, before the g^3 factor.
 // Source: gargantua design choice, see note.
-#define EXPOSURE_DEFAULT (0.35f)
+#define EMISSION_SCALE (0.0005f)
+
+// Stylized. The simulated gas speed is compressed to beta = ceiling tanh(v / ceiling) before the Doppler factor, since pseudo Newtonian orbits exceed c inside r of about 4; the innermost stable orbit speed 0.61 maps to 0.52, close to the Schwarzschild value 0.5.
+// Source: gargantua design choice, see note.
+#define GAS_SPEED_CEILING (0.85f)
+
+// Stylized. Extinction per unit path length per unit particle density; small so the far side of the disk and its lensed images stay visible.
+// Source: gargantua design choice, see note.
+#define VOLUME_OPACITY (0.0005f)
+
+// Stylized. Scale of the procedural starfield behind escaped rays.
+// Source: gargantua design choice, see note.
+#define STAR_BRIGHTNESS (1.5f)
+
+// Substeps simulated before an offline still so the plunging region is populated; the drift time from r = 7 to the innermost stable orbit is about 320 substeps.
+// Source: gargantua design choice, see note.
+#define STILL_SETTLE_STEPS (600u)
+
+// Tile edge in pixels for offline stills; one tile is one command buffer, far below the 30 ms ceiling even at the still step cap.
+// Source: gargantua design choice, see note.
+#define STILL_TILE (128u)
 
 // No single command buffer may carry more GPU work than this; the macOS GPU watchdog limit is a few seconds, leaving two orders of magnitude of margin.
 // Source: gargantua design choice, see note.

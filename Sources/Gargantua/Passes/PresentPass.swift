@@ -1,4 +1,5 @@
 import Metal
+import Oracle
 import ShaderTypes
 import simd
 
@@ -37,12 +38,15 @@ final class PresentPass {
     /// Encode into any render pass whose color attachment matches the pixel
     /// format given at init. The hud is drawn at its native pixel size with a
     /// margin, anchored at the top left.
-    func encode(_ commandBuffer: MTLCommandBuffer, pass: MTLRenderPassDescriptor, hdr: MTLTexture, hudTexture: MTLTexture?, targetWidth: Int, targetHeight: Int) {
+    var debugView = false
+
+    func encode(_ commandBuffer: MTLCommandBuffer, pass: MTLRenderPassDescriptor, hdr: MTLTexture, debug: MTLTexture?, hudTexture: MTLTexture?, targetWidth: Int, targetHeight: Int) {
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else {
             Exit.operational("Metal could not create the present render encoder.")
         }
         encoder.label = "present"
-        var uniforms = PresentUniforms(hudRect: SIMD4(0, 0, 0, 0), exposure: exposure, hudVisible: 0, padding0: 0, padding1: 0)
+        var uniforms = PresentUniforms(hudRect: SIMD4(0, 0, 0, 0), exposure: exposure, hudVisible: 0,
+                                       debugView: (debugView && debug != nil) ? 1 : 0, driftBudget: Float(Constants.driftBudgetInteractive.value))
         if let hudTexture {
             let margin: Float = 16
             let w = Float(targetWidth), h = Float(targetHeight)
@@ -55,6 +59,7 @@ final class PresentPass {
         }
         encoder.setRenderPipelineState(tonemap)
         encoder.setFragmentTexture(hdr, index: 0)
+        encoder.setFragmentTexture(debug ?? hdr, index: 1)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<PresentUniforms>.stride, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         if let hudTexture {
