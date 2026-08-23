@@ -14,7 +14,7 @@ enum Validate {
         let passed: Bool
     }
 
-    static let order = ["isco", "determinism", "shadow", "deflection", "conservation_interactive", "conservation_still"]
+    static let order = ["isco", "determinism", "shadow", "deflection", "conservation_interactive", "conservation_still", "parity", "beaming"]
 
     static func run(_ options: Options) -> Never {
         let context = GpuContext()
@@ -23,21 +23,26 @@ enum Validate {
             Exit.operational(refusal)
         }
         let simPass = SimPass(context: context)
+        let splatPass = SplatPass(context: context)
         let marchPass = MarchPass(context: context)
         let volume = Volume(context: context, size: configuration.volume)
-        let reference = ParticleSystem(context: context, count: 1, seed: 0, potential: .paczynskiWiita)
-        let probes = Probes(context: context, marchPass: marchPass, volume: volume, blackbody: reference.blackbody)
+        let system = ParticleSystem(context: context, count: configuration.particles, seed: configuration.seed, potential: .paczynskiWiita)
+        let probes = Probes(context: context, marchPass: marchPass, volume: volume, blackbody: system.blackbody)
+        let isco = load("isco")
+        advance(system, steps: Int(isco.parameter("settlingSteps")) / Int(Constants.simulationSubsteps.value), context: context, simPass: simPass, seedFirst: true)
 
         var rows: [Row] = []
         for name in order {
             let golden = load(name)
             switch name {
-            case "isco": rows.append(isco(golden, context: context, simPass: simPass, configuration: configuration))
+            case "isco": rows.append(Validate.isco(golden, context: context, system: system))
             case "determinism": rows.append(determinism(golden, context: context, simPass: simPass, configuration: configuration))
             case "shadow": rows.append(shadow(golden, probes: probes))
             case "deflection": rows.append(deflection(golden, probes: probes))
             case "conservation_interactive": rows.append(conservation(golden, probes: probes, settings: .interactive))
             case "conservation_still": rows.append(conservation(golden, probes: probes, settings: .still))
+            case "parity": rows.append(parity(golden, probes: probes))
+            case "beaming": rows.append(beaming(golden, context: context, system: system, volume: volume, splatPass: splatPass, marchPass: marchPass))
             default: break
             }
         }
@@ -90,9 +95,7 @@ enum Validate {
         return Array(UnsafeBufferPointer(start: shared.contents().bindMemory(to: Particle.self, capacity: system.count), count: system.count))
     }
 
-    static func isco(_ golden: Golden, context: GpuContext, simPass: SimPass, configuration: Configuration) -> Row {
-        let system = ParticleSystem(context: context, count: configuration.particles, seed: configuration.seed, potential: .paczynskiWiita)
-        advance(system, steps: Int(golden.parameter("settlingSteps")) / Int(Constants.simulationSubsteps.value), context: context, simPass: simPass, seedFirst: true)
+    static func isco(_ golden: Golden, context: GpuContext, system: ParticleSystem) -> Row {
         let radii = readback(system, context: context).map { particle -> Double in
             let x = Double(particle.position.x), y = Double(particle.position.y)
             return (x * x + y * y).squareRoot()
@@ -163,6 +166,118 @@ enum Validate {
         let worst = results.map { Double($0.drift) }.max() ?? 0
         let exhausted = results.filter { $0.outcome == RayExhausted }.count
         return Row(golden: golden, measured: String(format: "max drift %.2e, %d of %d rays exhausted", worst, exhausted, results.count), passed: golden.passes(worst))
+    }
+
+    /// The same launches on both sides, from identical single precision values.
+    static func parity(_ golden: Golden, probes: Probes) -> Row {
+        let preset = Preset.standard.marchSize
+        let launches = Probes.cameraGrid(camera: OrbitCamera(), columns: Int(golden.parameter("columns")), rows: Int(golden.parameter("rows")),
+                                         aspect: Double(preset.width) / Double(preset.height)).map { launch in
+            Probes.Launch(origin: SIMD3(Double(Float(launch.origin.x)), Double(Float(launch.origin.y)), Double(Float(launch.origin.z))),
+                          direction: SIMD3(Double(Float(launch.direction.x)), Double(Float(launch.direction.y)), Double(Float(launch.direction.z))))
+        }
+        let gpu = probes.run(launches, settings: .still)
+        var worst = 0.0
+        var mismatchedOutcomes = 0
+        for (launch, result) in zip(launches, gpu) {
+            let oracle = Schwarzschild.integrate(Schwarzschild.launch(from: launch.origin, direction: launch.direction), settings: .still)
+            let expected = oracle.ray.position
+            let actual = SIMD3(Double(result.position.x), Double(result.position.y), Double(result.position.z))
+            let distance = ((expected - actual) * (expected - actual)).sum().squareRoot()
+            worst = max(worst, distance / max((expected * expected).sum().squareRoot(), 1.0))
+            let outcome: Schwarzschild.Outcome = result.outcome == RayCaptured ? .captured : (result.outcome == RayEscaped ? .escaped : .exhausted)
+            if outcome != oracle.outcome { mismatchedOutcomes += 1 }
+        }
+        return Row(golden: golden, measured: String(format: "max relative endpoint error %.2e, %d outcome mismatches", worst, mismatchedOutcomes),
+                   passed: golden.passes(worst) && mismatchedOutcomes == 0)
+    }
+
+    /// Read a 3D half precision texture back as doubles.
+    static func readVolume(_ texture: MTLTexture, context: GpuContext) -> [SIMD4<Double>] {
+        let size = texture.width
+        let bytesPerRow = size * 8
+        let bytesPerImage = bytesPerRow * size
+        let buffer = context.makeBuffer(bytes: bytesPerImage * size, label: "volume readback", shared: true)
+        let commandBuffer = context.makeCommandBuffer(label: "volume readback")
+        guard let blit = commandBuffer.makeBlitCommandEncoder() else {
+            Exit.operational("Metal could not create the volume readback encoder.")
+        }
+        blit.copy(from: texture, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+                  sourceSize: MTLSize(width: size, height: size, depth: size),
+                  to: buffer, destinationOffset: 0, destinationBytesPerRow: bytesPerRow, destinationBytesPerImage: bytesPerImage)
+        blit.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+        let count = size * size * size
+        let halves = UnsafeBufferPointer(start: buffer.contents().bindMemory(to: Float16.self, capacity: count * 4), count: count * 4)
+        var voxels = [SIMD4<Double>](repeating: SIMD4(repeating: 0.0), count: count)
+        for i in 0..<count {
+            let x = Double(halves[4 * i])
+            let y = Double(halves[4 * i + 1])
+            let z = Double(halves[4 * i + 2])
+            let w = Double(halves[4 * i + 3])
+            voxels[i] = SIMD4(x, y, z, w)
+        }
+        return voxels
+    }
+
+    /// Read a 2D half precision image back as linear rgb.
+    static func readImage(_ texture: MTLTexture, context: GpuContext) -> [SIMD3<Double>] {
+        let width = texture.width, height = texture.height
+        let buffer = context.makeBuffer(bytes: width * height * 8, label: "image readback", shared: true)
+        let commandBuffer = context.makeCommandBuffer(label: "image readback")
+        guard let blit = commandBuffer.makeBlitCommandEncoder() else {
+            Exit.operational("Metal could not create the image readback encoder.")
+        }
+        blit.copy(from: texture, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+                  sourceSize: MTLSize(width: width, height: height, depth: 1),
+                  to: buffer, destinationOffset: 0, destinationBytesPerRow: width * 8, destinationBytesPerImage: width * height * 8)
+        blit.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+        let count = width * height
+        let halves = UnsafeBufferPointer(start: buffer.contents().bindMemory(to: Float16.self, capacity: count * 4), count: count * 4)
+        var pixels = [SIMD3<Double>](repeating: SIMD3(repeating: 0.0), count: count)
+        for i in 0..<count {
+            let r = Double(halves[4 * i])
+            let g = Double(halves[4 * i + 1])
+            let b = Double(halves[4 * i + 2])
+            pixels[i] = SIMD3(r, g, b)
+        }
+        return pixels
+    }
+
+    /// GPU render and oracle render of the same volume, compared by the
+    /// brightness ratio of the two image halves.
+    static func beaming(_ golden: Golden, context: GpuContext, system: ParticleSystem, volume: Volume, splatPass: SplatPass, marchPass: MarchPass) -> Row {
+        let width = Int(golden.parameter("width")), height = Int(golden.parameter("height"))
+        let splat = context.makeCommandBuffer(label: "validate splat")
+        volume.encodeClear(splat)
+        splatPass.encode(splat, system: system, volume: volume)
+        splat.commit()
+        splat.waitUntilCompleted()
+
+        let camera = OrbitCamera()
+        let targets = MarchPass.makeTargets(context: context, width: width, height: height, label: "beaming")
+        let uniforms = MarchPass.uniforms(camera: camera, width: width, height: height, settings: .still,
+                                          driftBudget: Constants.driftBudgetStill.value, redshift: true, starSeed: 0, stars: false)
+        let render = context.makeCommandBuffer(label: "validate render")
+        marchPass.encodeImage(render, uniforms: uniforms, volume: volume, blackbody: system.blackbody, output: targets.output, debug: targets.debug, counters: nil)
+        render.commit()
+        render.waitUntilCompleted()
+        let gpuImage = readImage(targets.output, context: context)
+        let gpuRatio = LensedRender.sideRatio(luminance: gpuImage.map(LensedRender.luminance), width: width, height: height)
+
+        let emission = readVolume(volume.emission, context: context)
+        let velocity = readVolume(volume.velocity, context: context).map { SIMD3($0.x, $0.y, $0.z) }
+        let field = VolumeField(size: volume.size, halfExtent: Constants.volumeHalfExtent.value, emission: emission, velocity: velocity)
+        let tanHalf = Double(tan(camera.fovY * 0.5))
+        let oracleCamera = LensedRender.Camera(position: SIMD3<Double>(camera.position), right: SIMD3<Double>(camera.right), up: SIMD3<Double>(camera.up),
+                                               forward: SIMD3<Double>(camera.forward), tanHalfFov: SIMD2(tanHalf * Double(width) / Double(height), tanHalf))
+        let oracleImage = LensedRender.image(width: width, height: height, camera: oracleCamera, field: field, settings: .still)
+        let oracleRatio = LensedRender.sideRatio(luminance: oracleImage.map(LensedRender.luminance), width: width, height: height)
+        let measured = gpuRatio / oracleRatio
+        return Row(golden: golden, measured: String(format: "gpu %.3f vs oracle %.3f, ratio %.3f", gpuRatio, oracleRatio, measured), passed: golden.passes(measured))
     }
 
     /// 64 bit FNV-1a over the raw particle bytes.

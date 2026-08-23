@@ -49,7 +49,7 @@ final class MarchPass {
     }
 
     static func uniforms(camera: OrbitCamera, width: Int, height: Int, tileOrigin: (Int, Int) = (0, 0),
-                         settings: Schwarzschild.Settings, driftBudget: Double, redshift: Bool, starSeed: UInt32) -> MarchUniforms {
+                         settings: Schwarzschild.Settings, driftBudget: Double, redshift: Bool, starSeed: UInt32, stars: Bool = true) -> MarchUniforms {
         let tanHalf = tan(camera.fovY * 0.5)
         return MarchUniforms(
             cameraPosition: camera.position,
@@ -61,7 +61,7 @@ final class MarchPass {
             tileOrigin: SIMD2(UInt32(tileOrigin.0), UInt32(tileOrigin.1)),
             volumeHalfExtent: Float(Constants.volumeHalfExtent.value),
             opacityScale: Float(Constants.volumeOpacity.value),
-            starBrightness: Float(Constants.starBrightness.value),
+            starBrightness: stars ? Float(Constants.starBrightness.value) : 0,
             driftBudget: Float(driftBudget),
             starSeed: starSeed,
             redshift: redshift ? 1 : 0,

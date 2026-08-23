@@ -1,0 +1,9 @@
+{
+  "name": "parity",
+  "claim": "GPU geodesic endpoints vs oracle, 64 sampled rays",
+  "kind": "absolute",
+  "expected": 0,
+  "tolerance": 0.001,
+  "method": "Integrate a columns by rows grid of rays across the default camera view with the still step policy on the GPU and in the oracle, from identical single precision launch values, and report the largest endpoint distance divided by the larger of the oracle endpoint radius and one.",
+  "parameters": { "columns": 8, "rows": 8 }
+}

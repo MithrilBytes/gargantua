@@ -1,0 +1,9 @@
+{
+  "name": "beaming",
+  "claim": "approaching to receding side brightness ratio matches the oracle render",
+  "kind": "relative",
+  "expected": 1.0,
+  "tolerance": 0.1,
+  "method": "Settle the disk, splat it, render a width by height image with the still step policy and no stars on the GPU, read the resolved volume back and render the same image in the oracle, take the ratio of the brighter image half to the dimmer half on each side, and report the GPU ratio divided by the oracle ratio.",
+  "parameters": { "width": 192, "height": 108 }
+}
