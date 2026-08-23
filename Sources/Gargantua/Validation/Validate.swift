@@ -14,7 +14,7 @@ enum Validate {
         let passed: Bool
     }
 
-    static let order = ["isco", "determinism", "shadow", "deflection", "conservation_interactive", "conservation_still", "parity", "beaming"]
+    static let order = ["isco", "determinism", "shadow", "deflection", "conservation_interactive", "conservation_still", "parity", "beaming", "sky", "jump"]
 
     static func run(_ options: Options) -> Never {
         let context = GpuContext()
@@ -43,6 +43,8 @@ enum Validate {
             case "conservation_still": rows.append(conservation(golden, probes: probes, settings: .still))
             case "parity": rows.append(parity(golden, probes: probes))
             case "beaming": rows.append(beaming(golden, context: context, system: system, volume: volume, splatPass: splatPass, marchPass: marchPass))
+            case "sky": rows.append(sky(golden, probes: probes))
+            case "jump": rows.append(jump(golden, context: context, system: system, volume: volume, marchPass: marchPass))
             default: break
             }
         }
@@ -278,6 +280,63 @@ enum Validate {
         let oracleRatio = LensedRender.sideRatio(luminance: oracleImage.map(LensedRender.luminance), width: width, height: height)
         let measured = gpuRatio / oracleRatio
         return Row(golden: golden, measured: String(format: "gpu %.3f vs oracle %.3f, ratio %.3f", gpuRatio, oracleRatio, measured), passed: golden.passes(measured))
+    }
+
+    /// Asymptotic sky directions from the sweep tables against the oracle
+    /// integrated far out.
+    static func sky(_ golden: Golden, probes: Probes) -> Row {
+        let preset = Preset.standard.marchSize
+        let launches = Probes.cameraGrid(camera: OrbitCamera(), columns: Int(golden.parameter("columns")), rows: Int(golden.parameter("rows")),
+                                         aspect: Double(preset.width) / Double(preset.height)).map { launch in
+            Probes.Launch(origin: SIMD3(Double(Float(launch.origin.x)), Double(Float(launch.origin.y)), Double(Float(launch.origin.z))),
+                          direction: SIMD3(Double(Float(launch.direction.x)), Double(Float(launch.direction.y)), Double(Float(launch.direction.z))))
+        }
+        let gpu = probes.run(launches, settings: .still, jump: true)
+        let far = golden.parameter("oracleRadius")
+        var settings = Schwarzschild.Settings(stepMax: 20.0, escapeRadius: far, stepCap: 400_000)
+        settings.stepFactor = 0.01
+        var worst = 0.0
+        var mismatches = 0
+        var compared = 0
+        for (launch, result) in zip(launches, gpu) {
+            let oracle = Schwarzschild.integrate(Schwarzschild.launch(from: launch.origin, direction: launch.direction), settings: settings)
+            let gpuEscaped = result.outcome == RayEscaped
+            if gpuEscaped != (oracle.outcome == .escaped) { mismatches += 1; continue }
+            guard gpuEscaped else { continue }
+            let expected = oracle.ray.direction
+            let actual = SIMD3(Double(result.direction.x), Double(result.direction.y), Double(result.direction.z))
+            let cosine = min(max((expected * actual).sum(), -1.0), 1.0)
+            worst = max(worst, acos(cosine))
+            compared += 1
+        }
+        return Row(golden: golden, measured: String(format: "max sky angle error %.2e rad over %d escaping rays, %d fate mismatches", worst, compared, mismatches),
+                   passed: golden.passes(worst) && mismatches == 0)
+    }
+
+    /// The image with the sphere jump against the fully integrated image.
+    static func jump(_ golden: Golden, context: GpuContext, system: ParticleSystem, volume: Volume, marchPass: MarchPass) -> Row {
+        let width = Int(golden.parameter("width")), height = Int(golden.parameter("height"))
+        let camera = OrbitCamera()
+        func render(jump: Bool) -> [SIMD3<Double>] {
+            let targets = MarchPass.makeTargets(context: context, width: width, height: height, label: "jump")
+            let uniforms = MarchPass.uniforms(camera: camera, width: width, height: height, settings: .still,
+                                              driftBudget: Constants.driftBudgetStill.value, redshift: true, starSeed: 0, stars: false,
+                                              tables: jump ? marchPass.tables : nil)
+            let commandBuffer = context.makeCommandBuffer(label: "validate jump")
+            marchPass.encodeImage(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody, targets: targets, counters: nil)
+            commandBuffer.commit()
+            commandBuffer.waitUntilCompleted()
+            return readImage(targets.output, context: context)
+        }
+        let full = render(jump: false).map(LensedRender.luminance)
+        let jumped = render(jump: true).map(LensedRender.luminance)
+        var difference = 0.0, total = 0.0
+        for (a, b) in zip(full, jumped) {
+            difference += abs(a - b)
+            total += a
+        }
+        let measured = total > 0 ? difference / total : 1.0
+        return Row(golden: golden, measured: String(format: "mean relative difference %.2e", measured), passed: golden.passes(measured))
     }
 
     /// 64 bit FNV-1a over the raw particle bytes.

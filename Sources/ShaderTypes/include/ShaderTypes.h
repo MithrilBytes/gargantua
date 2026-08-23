@@ -121,6 +121,18 @@ typedef struct {
     /// Minimum path length between stored samples when baking.
     float bakeSpacing;
     unsigned int bakeCapacity;
+    /// Radius of the sphere rays are integrated inside; zero integrates
+    /// everything. Outside it the bending is looked up from sweep tables.
+    float sphereRadius;
+    float cameraRadius;
+    /// Largest impact parameter that enters the sphere.
+    float sphereMaxB;
+    /// Upper end of the sphere sweep table, the tangential ray at the sphere.
+    float sphereTableMaxB;
+    float cameraMaxB;
+    float skyMinB;
+    float skyMaxB;
+    float padding2;
     /// Subpixel sample offset in input pixels, for temporal upscaling.
     simd_float2 jitter;
     /// Previous frame's camera, for motion vectors by straight line reprojection.

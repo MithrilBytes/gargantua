@@ -123,6 +123,10 @@
 // Source: gargantua design choice, see note.
 #define BAKE_FRAMES (4u)
 
+// Entries in each sweep table the march looks bending up from outside the integration sphere.
+// Source: gargantua design choice, see note.
+#define SWEEP_TABLE_SIZE (1024u)
+
 // Allowed relative drift of a ray's conserved energy and angular momentum over a 256 step integration.
 // Source: gargantua design choice, see note.
 #define DRIFT_BUDGET_INTERACTIVE (0.0001f)

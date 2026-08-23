@@ -23,7 +23,7 @@ final class Probes {
         let direction: SIMD3<Double>
     }
 
-    func run(_ launches: [Launch], settings: Schwarzschild.Settings) -> [RayProbeResult] {
+    func run(_ launches: [Launch], settings: Schwarzschild.Settings, jump: Bool = false) -> [RayProbeResult] {
         let count = launches.count
         let input = context.makeBuffer(bytes: count * MemoryLayout<RayProbe>.stride, label: "probe input", shared: true)
         let output = context.makeBuffer(bytes: count * MemoryLayout<RayProbeResult>.stride, label: "probe output", shared: true)
@@ -34,7 +34,7 @@ final class Probes {
                 direction: packed3(x: Float(launch.direction.x), y: Float(launch.direction.y), z: Float(launch.direction.z)))
         }
         let uniforms = MarchPass.uniforms(camera: OrbitCamera(), width: 1, height: 1, settings: settings,
-                                          driftBudget: 1, redshift: false, starSeed: 0)
+                                          driftBudget: 1, redshift: false, starSeed: 0, tables: jump ? marchPass.tables : nil)
         let commandBuffer = context.makeCommandBuffer(label: "probes")
         marchPass.encodeProbes(commandBuffer, probes: input, results: output, count: count, uniforms: uniforms, volume: volume, blackbody: blackbody)
         commandBuffer.commit()

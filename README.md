@@ -128,10 +128,13 @@ Four passes, one command buffer, every vsync:
    reduced to its own orbital plane and integrated with fourth order Runge
    Kutta at a step proportional to radius. Inside the disk slab it samples
    the volume, scales emission by the redshift factor cubed, and composites
-   front to back until opaque. Escaped rays shade a procedural starfield by
-   their final direction; captured rays are black. Every ray's conserved
-   energy and angular momentum are checked against their launch values and
-   the drift is counted.
+   front to back until opaque. Outside a sphere of radius 30 nothing can
+   be sampled, so rays jump to the sphere along the exact solution and
+   leave it with their remaining bending looked up from sweep tables
+   (`docs/lab/01-sweep-tables.md`). Escaped rays shade a procedural
+   starfield by their direction at infinity; captured rays are black.
+   Every ray's conserved energy and angular momentum are checked against
+   their launch values and the drift is counted.
 4. **present**: MetalFX temporal upscaling from the march resolution to the
    window (the march jitters its samples and writes depth and motion for
    it), tone mapping with the Khronos PBR Neutral curve, the hud, vsync.
@@ -164,6 +167,8 @@ Computed, and held to the oracle by `gargantua validate`:
 | conservation_still       | per ray E and L relative drift, 4096 step still         | under 1e-5   |
 | parity                   | GPU geodesic endpoints vs oracle, 64 sampled rays       | under 1e-3   |
 | beaming                  | approaching to receding brightness ratio vs oracle render | 10 percent |
+| sky                      | sky directions from the sweep tables match the oracle far out | under 1e-3 rad |
+| jump                     | the image with the sphere jump matches the full integration | 1 percent |
 
 The goldens are data in `goldens/`; `swift test` holds the oracle to the
 same files and `validate` holds the GPU to them. The splat pass is excluded
@@ -206,8 +211,9 @@ were read.
 
 A march frame is 38 ms and a walked frame 8 ms on this machine; the base M1
 has half the GPU cores. The march line is the one the optimization campaign
-attacks next; the lanes and their measurements land as dated writeups in
-`docs/lab/`. Reports from `bench` are committed in `bench/results/`
+attacks; the lanes and their measurements land as dated writeups in
+`docs/lab/`. The first lane, sweep tables outside the integration sphere,
+took the march to 17.0 ms and the frame to 24.1 ms. Reports from `bench` are committed in `bench/results/`
 alongside the change they measure, and a regression is caught by reading
 two files side by side.
 

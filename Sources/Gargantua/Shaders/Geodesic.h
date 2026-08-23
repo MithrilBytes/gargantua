@@ -99,6 +99,78 @@ static inline float3 rayDirection(PlaneRay ray) {
     return len > 0.0f ? local / len : radial;
 }
 
+// Table coordinate for an impact parameter; tables are sampled at
+// b = low + (high - low) (1 - (1 - t)^2). Mirrors Oracle/Deflection.swift.
+// Entry i of a table sits at t = i / (N - 1); the sampler puts it at
+// (i + 0.5) / N, so the coordinate is remapped before sampling.
+static inline float sweepCoordinate(float low, float high, float b) {
+    float x = clamp((b - low) / (high - low), 0.0f, 1.0f);
+    float t = 1.0f - sqrt(1.0f - x);
+    return (t * (SWEEP_TABLE_SIZE - 1.0f) + 0.5f) / SWEEP_TABLE_SIZE;
+}
+
+// Direction of travel at infinity for a ray whose azimuth tends to phi.
+static inline float3 asymptoticDirection(PlaneRay ray, float phi) {
+    return cos(phi) * ray.e1 + sin(phi) * ray.e2;
+}
+
+struct PreparedRay {
+    PlaneRay ray;
+    /// True when the ray never enters the sphere: shade the sky along
+    /// `sky` and skip the integration.
+    bool skyOnly;
+    float3 sky;
+};
+
+// Skip the empty leg between the camera and the integration sphere. Rays
+// that never reach the sphere get their asymptotic direction from the sky
+// table; the rest are placed exactly on the sphere with their conserved
+// energy and angular momentum. Impact parameters are never negative here
+// because launchRay orients the plane along the ray's turn.
+static inline PreparedRay prepareRay(float3 origin, float3 direction, constant MarchUniforms& u,
+                                     texture1d<float, access::sample> sphereSweep,
+                                     texture1d<float, access::sample> cameraSweep,
+                                     texture1d<float, access::sample> skySweep) {
+    constexpr sampler linearClamp(filter::linear, address::clamp_to_edge);
+    PreparedRay p;
+    p.ray = launchRay(origin, direction);
+    p.skyOnly = false;
+    p.sky = float3(0.0f);
+    if (u.sphereRadius <= 0.0f || p.ray.s.r <= u.sphereRadius) return p;
+    float b = abs(p.ray.angularMomentum) / p.ray.energy;
+    if (p.ray.s.rDot >= 0.0f) {
+        float sweep = cameraSweep.sample(linearClamp, sweepCoordinate(0.0f, u.cameraMaxB, b)).r;
+        p.skyOnly = true;
+        p.sky = asymptoticDirection(p.ray, p.ray.s.phi + sweep);
+        return p;
+    }
+    if (b >= u.sphereMaxB) {
+        float sweep = skySweep.sample(linearClamp, sweepCoordinate(u.skyMinB, u.skyMaxB, b)).r;
+        p.skyOnly = true;
+        p.sky = asymptoticDirection(p.ray, p.ray.s.phi + sweep);
+        return p;
+    }
+    float sweep = sphereSweep.sample(linearClamp, sweepCoordinate(0.0f, u.sphereTableMaxB, b)).r - cameraSweep.sample(linearClamp, sweepCoordinate(0.0f, u.cameraMaxB, b)).r;
+    float r = u.sphereRadius;
+    float f = schwarzschildF(r);
+    float E = p.ray.energy;
+    float L = p.ray.angularMomentum;
+    float phiDot = L / (r * r);
+    float rDot = -sqrt(max(E * E - f * L * L / (r * r), 0.0f));
+    float vDot = (E + rDot) / f;
+    p.ray.s = RayState { 0.0f, r, p.ray.s.phi + sweep, vDot, rDot, phiDot };
+    return p;
+}
+
+// Sky direction for a ray that left the sphere moving outward.
+static inline float3 sphereExitDirection(PlaneRay ray, constant MarchUniforms& u,
+                                         texture1d<float, access::sample> sphereSweep) {
+    constexpr sampler linearClamp(filter::linear, address::clamp_to_edge);
+    float b = abs(ray.angularMomentum) / ray.energy;
+    float sweep = sphereSweep.sample(linearClamp, sweepCoordinate(0.0f, u.sphereTableMaxB, b)).r;
+    return asymptoticDirection(ray, ray.s.phi + sweep);
+}
+
 static inline float rayStepLength(float r, GeodesicSettings g) {
     return clamp(g.stepFactor * r, g.stepMin, g.stepMax);
 }

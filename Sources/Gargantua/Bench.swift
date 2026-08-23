@@ -69,7 +69,7 @@ enum Bench {
         let uniforms = MarchPass.uniforms(camera: camera, width: width, height: height, settings: .interactive,
                                           driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
                                           starSeed: UInt32(truncatingIfNeeded: configuration.seed),
-                                          bakeSpacing: bakePass.spacing(volumeSize: volume.size))
+                                          bakeSpacing: bakePass.spacing(volumeSize: volume.size), tables: marchPass.tables)
         var bakeUniforms = uniforms
         bakeUniforms.geodesic = MarchPass.settings(.still)
 
@@ -98,7 +98,7 @@ enum Bench {
             var total = 0.0
             while !bakePass.complete {
                 let commandBuffer = context.makeCommandBuffer(label: "bench bake chunk")
-                bakePass.encodeBakeChunk(commandBuffer, camera: camera, uniforms: bakeUniforms)
+                bakePass.encodeBakeChunk(commandBuffer, camera: camera, uniforms: bakeUniforms, tables: marchPass.tables)
                 commandBuffer.commit()
                 commandBuffer.waitUntilCompleted()
                 total += commandBuffer.gpuEndTime - commandBuffer.gpuStartTime

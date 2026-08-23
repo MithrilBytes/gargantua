@@ -52,7 +52,7 @@ final class BakePass {
     }
 
     /// Bake the next chunk of rows for `camera`, spread over BAKE_FRAMES frames.
-    func encodeBakeChunk(_ commandBuffer: MTLCommandBuffer, camera: OrbitCamera, uniforms base: MarchUniforms) {
+    func encodeBakeChunk(_ commandBuffer: MTLCommandBuffer, camera: OrbitCamera, uniforms base: MarchUniforms, tables: DeflectionTables) {
         guard let samples, let headers else { return }
         if bakedCamera == nil {
             bakedCamera = camera
@@ -69,16 +69,17 @@ final class BakePass {
         encoder.setBuffer(headers, offset: 0, index: 1)
         encoder.setBytes(&uniforms, length: MemoryLayout<MarchUniforms>.stride, index: 2)
         encoder.setBuffer(overflow, offset: 0, index: 3)
+        tables.bind(encoder)
         encoder.dispatchThreads(MTLSize(width: width, height: rows, depth: 1), threadsPerThreadgroup: MTLSize(width: 32, height: 4, depth: 1))
         encoder.endEncoding()
         bakedRows += rows
     }
 
     /// Bake everything in one command buffer; for the bench only.
-    func encodeFullBake(_ commandBuffer: MTLCommandBuffer, camera: OrbitCamera, uniforms: MarchUniforms) {
+    func encodeFullBake(_ commandBuffer: MTLCommandBuffer, camera: OrbitCamera, uniforms: MarchUniforms, tables: DeflectionTables) {
         invalidate()
         while !complete {
-            encodeBakeChunk(commandBuffer, camera: camera, uniforms: uniforms)
+            encodeBakeChunk(commandBuffer, camera: camera, uniforms: uniforms, tables: tables)
         }
     }
 

@@ -1,0 +1,9 @@
+{
+  "name": "jump",
+  "claim": "the image with the sphere jump matches the fully integrated image",
+  "kind": "absolute",
+  "expected": 0,
+  "tolerance": 0.01,
+  "method": "Render a width by height image of the disk without stars twice with the still step policy, once integrating every ray from the camera to the escape radius and once jumping rays to the integration sphere and out of it analytically, and report the sum of absolute luminance differences over the sum of luminance.",
+  "parameters": { "width": 192, "height": 108 }
+}

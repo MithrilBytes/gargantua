@@ -18,6 +18,9 @@ kernel void bakeRays(device half4* samples [[buffer(0)]],
                      device BakedRay* headers [[buffer(1)]],
                      constant MarchUniforms& u [[buffer(2)]],
                      device atomic_uint* overflow [[buffer(3)]],
+                     texture1d<float, access::sample> sphereSweep [[texture(7)]],
+                     texture1d<float, access::sample> cameraSweep [[texture(8)]],
+                     texture1d<float, access::sample> skySweep [[texture(9)]],
                      uint2 gid [[thread_position_in_grid]]) {
     uint2 pixel = u.tileOrigin + gid;
     if (any(pixel >= u.resolution)) return;
@@ -28,7 +31,17 @@ kernel void bakeRays(device half4* samples [[buffer(0)]],
     float2 ndc = float2((2.0f * sample.x / float(u.resolution.x) - 1.0f) * u.tanHalfFov.x,
                         (1.0f - 2.0f * sample.y / float(u.resolution.y)) * u.tanHalfFov.y);
     float3 direction = normalize(u.cameraForward + ndc.x * u.cameraRight + ndc.y * u.cameraUp);
-    PlaneRay ray = launchRay(u.cameraPosition, direction);
+    PreparedRay prepared = prepareRay(u.cameraPosition, direction, u, sphereSweep, cameraSweep, skySweep);
+    if (prepared.skyOnly) {
+        BakedRay header;
+        header.count = 0u;
+        header.fallsIn = 0u;
+        header.directionXY = packHalf2(prepared.sky.x, prepared.sky.y);
+        header.directionZDepth = packHalf2(prepared.sky.z, 1.0f);
+        headers[index] = header;
+        return;
+    }
+    PlaneRay ray = prepared.ray;
 
     float3 previous = rayPosition(ray);
     float sinceSample = 0.0f;
@@ -37,9 +50,15 @@ kernel void bakeRays(device half4* samples [[buffer(0)]],
     uint count = 0u;
     bool overflowed = false;
     uint outcome = RayExhausted;
+    bool leftSphere = false;
     for (uint k = 0u; k < STEP_CAP_STILL; ++k) {
         if (k >= u.geodesic.stepCap) break;
-        ray.s = rayStep(ray.s, rayStepLength(ray.s.r, u.geodesic));
+        float h = rayStepLength(ray.s.r, u.geodesic);
+        RayState before = ray.s;
+        ray.s = rayStep(ray.s, h);
+        if (u.sphereRadius > 0.0f && ray.s.r >= u.sphereRadius && ray.s.rDot > 0.0f && before.r < u.sphereRadius) {
+            ray.s = rayStep(before, h * (u.sphereRadius - before.r) / (ray.s.r - before.r));
+        }
         float3 position = rayPosition(ray);
         float pathLength = length(position - previous);
         sinceSample += pathLength;
@@ -56,11 +75,12 @@ kernel void bakeRays(device half4* samples [[buffer(0)]],
             }
             sinceSample = 0.0f;
         }
+        if (u.sphereRadius > 0.0f && ray.s.r >= u.sphereRadius && ray.s.rDot > 0.0f) { outcome = RayEscaped; leftSphere = true; break; }
         if (ray.s.r >= u.geodesic.escapeRadius) { outcome = RayEscaped; break; }
     }
     bool fallsIn = outcome == RayCaptured ||
         (outcome == RayExhausted && ray.s.rDot < 0.0f && abs(ray.angularMomentum) < B_CRITICAL * ray.energy);
-    float3 final = rayDirection(ray);
+    float3 final = leftSphere ? sphereExitDirection(ray, u, sphereSweep) : rayDirection(ray);
     float depth = firstSampleDepth >= 0.0f ? firstSampleDepth : travelled;
     BakedRay header;
     header.count = count;
