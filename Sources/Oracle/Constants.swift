@@ -90,6 +90,11 @@ public enum Constants {
         source: design,
         note: "Rays and particles terminate here, one percent above the horizon, so single precision arithmetic never evaluates the metric at r = 2.")
 
+    public static let kerrCaptureMargin = Constant<Double>(
+        "KERR_CAPTURE_MARGIN", 0.05,
+        source: design,
+        note: "Kerr rays terminate this far above the outer horizon, where Boyer and Lindquist momenta steepen as one over Delta; wider than the Schwarzschild margin because the coordinates, unlike Eddington and Finkelstein, are singular there.")
+
     public static let escapeRadius = Constant<Double>(
         "R_ESCAPE", 60.0,
         source: design,
@@ -321,7 +326,7 @@ public enum Constants {
     /// Every constant, in the order they appear in the generated header.
     public static let all: [any ConstantEntry] = [
         schwarzschildRadius, photonSphere, isco, marginallyBound, criticalImpactParameter, weakDeflectionCoefficient,
-        captureRadius, escapeRadius, diskOuterRadius, feedInnerRadius, diskSlabHalfHeight, volumeHalfExtent,
+        captureRadius, kerrCaptureMargin, escapeRadius, diskOuterRadius, feedInnerRadius, diskSlabHalfHeight, volumeHalfExtent,
         simulationTimestep, simulationSubsteps, dragAlpha, plungeSpeedLimit, feedVelocityDispersion, diskAspectRatio,
         peakTemperature, zeroTorqueFloor, cicCorners, blackbodyMinTemperature, blackbodyMaxTemperature, blackbodyTableSize,
         stepCapInteractive, stepCapStill, stepRadiusFactor, stepMin, stepMax,

@@ -31,6 +31,10 @@
 // Source: gargantua design choice, see note.
 #define R_CAPTURE (2.02f)
 
+// Kerr rays terminate this far above the outer horizon, where Boyer and Lindquist momenta steepen as one over Delta; wider than the Schwarzschild margin because the coordinates, unlike Eddington and Finkelstein, are singular there.
+// Source: gargantua design choice, see note.
+#define KERR_CAPTURE_MARGIN (0.05f)
+
 // Rays and particles beyond this radius are treated as escaped.
 // Source: gargantua design choice, see note.
 #define R_ESCAPE (60.0f)
