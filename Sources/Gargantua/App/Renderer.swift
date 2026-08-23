@@ -158,7 +158,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         let uniforms = MarchPass.uniforms(camera: camera, previous: previousCamera, jitter: jitter, width: hdr.width, height: hdr.height,
                                           settings: .interactive, driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
                                           starSeed: UInt32(truncatingIfNeeded: system.seed),
-                                          bakeSpacing: bakePass?.spacing(volumeSize: volume.size) ?? 0)
+                                          bakeSpacing: bakePass?.spacing(volumeSize: volume.size) ?? 0, tables: marchPass.tables)
         previousCamera = camera
         if walking, let bakePass, let targets = marchPass.targets {
             bakePass.encodeWalk(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody, targets: targets)
@@ -169,7 +169,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
                 var bakeUniforms = uniforms
                 bakeUniforms.jitter = SIMD2(0, 0)
                 bakeUniforms.geodesic = MarchPass.settings(.still)
-                bakePass.encodeBakeChunk(commandBuffer, camera: camera, uniforms: bakeUniforms)
+                bakePass.encodeBakeChunk(commandBuffer, camera: camera, uniforms: bakeUniforms, tables: marchPass.tables)
             }
             if walkedLastFrame { upscaler?.reset() }
         }

@@ -50,7 +50,8 @@ enum Still {
             for column in 0..<columns {
                 let origin = (column * tile, row * tile)
                 let uniforms = MarchPass.uniforms(camera: camera, width: width, height: height, tileOrigin: origin, settings: .still,
-                                                  driftBudget: Constants.driftBudgetStill.value, redshift: true, starSeed: UInt32(truncatingIfNeeded: configuration.seed))
+                                                  driftBudget: Constants.driftBudgetStill.value, redshift: true, starSeed: UInt32(truncatingIfNeeded: configuration.seed),
+                                                  tables: marchPass.tables)
                 let commandBuffer = context.makeCommandBuffer(label: "still tile")
                 marchPass.encodeImage(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody, targets: targets, counters: nil)
                 guard let blit = commandBuffer.makeBlitCommandEncoder() else {

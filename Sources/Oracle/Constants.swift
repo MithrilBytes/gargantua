@@ -204,6 +204,11 @@ public enum Constants {
         source: design,
         note: "Frames a progressive rebake is spread across after the camera stops moving.")
 
+    public static let sweepTableSize = Constant<UInt32>(
+        "SWEEP_TABLE_SIZE", 1024,
+        source: design,
+        note: "Entries in each sweep table the march looks bending up from outside the integration sphere.")
+
     public static let driftBudgetInteractive = Constant<Double>(
         "DRIFT_BUDGET_INTERACTIVE", 1e-4,
         source: design,
@@ -274,7 +279,7 @@ public enum Constants {
         captureRadius, escapeRadius, diskOuterRadius, feedInnerRadius, diskSlabHalfHeight, volumeHalfExtent,
         simulationTimestep, simulationSubsteps, dragAlpha, feedVelocityDispersion, diskAspectRatio,
         peakTemperature, zeroTorqueFloor, blackbodyMinTemperature, blackbodyMaxTemperature, blackbodyTableSize,
-        stepCapInteractive, stepCapStill, stepRadiusFactor, stepMin, stepMax, bakeSamples, bakeSpacingVoxels, bakeFrames,
+        stepCapInteractive, stepCapStill, stepRadiusFactor, stepMin, stepMax, bakeSamples, bakeSpacingVoxels, bakeFrames, sweepTableSize,
         driftBudgetInteractive, driftBudgetStill,
         exposure, emissionScale, gasSpeedCeiling, volumeOpacity, starBrightness, stillSettleSteps, stillTile,
         commandBufferBudgetMilliseconds, memoryBudgetFraction, memoryBudgetCapBytes,

@@ -12,6 +12,7 @@ final class MarchPass {
     private let image: MTLComputePipelineState
     private let probe: MTLComputePipelineState
     private let context: GpuContext
+    let tables: DeflectionTables
     private(set) var output: MTLTexture?
     private(set) var debug: MTLTexture?
     private(set) var depth: MTLTexture?
@@ -23,6 +24,7 @@ final class MarchPass {
         self.context = context
         image = context.computePipeline("march.metal", "marchImage", preciseMath: true)
         probe = context.computePipeline("march.metal", "probeRays", preciseMath: true)
+        tables = DeflectionTables(context: context)
         for slot in 0..<3 {
             let buffer = context.makeBuffer(bytes: MemoryLayout<MarchCounters>.stride, label: "march counters \(slot)", shared: true)
             memset(buffer.contents(), 0, buffer.length)
@@ -65,10 +67,10 @@ final class MarchPass {
     static func uniforms(camera: OrbitCamera, previous: OrbitCamera? = nil, jitter: SIMD2<Float> = SIMD2(0, 0),
                          width: Int, height: Int, tileOrigin: (Int, Int) = (0, 0),
                          settings: Schwarzschild.Settings, driftBudget: Double, redshift: Bool, starSeed: UInt32, stars: Bool = true,
-                         bakeSpacing: Float = 0) -> MarchUniforms {
+                         bakeSpacing: Float = 0, tables: DeflectionTables? = nil) -> MarchUniforms {
         let tanHalf = tan(camera.fovY * 0.5)
         let before = previous ?? camera
-        return MarchUniforms(
+        var uniforms = MarchUniforms(
             cameraPosition: camera.position,
             cameraRight: camera.right,
             cameraUp: camera.up,
@@ -84,12 +86,18 @@ final class MarchPass {
             redshift: redshift ? 1 : 0,
             bakeSpacing: bakeSpacing,
             bakeCapacity: Constants.bakeSamples.value,
+            sphereRadius: 0, cameraRadius: 0, sphereMaxB: 0, sphereTableMaxB: 0, cameraMaxB: 0, skyMinB: 0, skyMaxB: 0, padding2: 0,
             jitter: jitter,
             previousPosition: before.position,
             previousRight: before.right,
             previousUp: before.up,
             previousForward: before.forward,
             geodesic: MarchPass.settings(settings))
+        if let tables {
+            tables.update(cameraRadius: Double(camera.distance))
+            tables.apply(to: &uniforms)
+        }
+        return uniforms
     }
 
     /// Render a tile (or the whole image when the targets cover it).
@@ -108,6 +116,7 @@ final class MarchPass {
         encoder.setTexture(blackbody, index: 4)
         encoder.setTexture(targets.depth, index: 5)
         encoder.setTexture(targets.motion, index: 6)
+        tables.bind(encoder)
         encoder.setBytes(&u, length: MemoryLayout<MarchUniforms>.stride, index: 0)
         encoder.setBuffer(counters ?? self.counters[0], offset: 0, index: 1)
         encoder.dispatchThreads(MTLSize(width: targets.output.width, height: targets.output.height, depth: 1),
@@ -153,6 +162,7 @@ final class MarchPass {
         encoder.setTexture(volume.emission, index: 2)
         encoder.setTexture(volume.velocity, index: 3)
         encoder.setTexture(blackbody, index: 4)
+        tables.bind(encoder)
         encoder.dispatchThreads(MTLSize(width: count, height: 1, depth: 1),
                                 threadsPerThreadgroup: MTLSize(width: min(probe.maxTotalThreadsPerThreadgroup, 64), height: 1, depth: 1))
         encoder.endEncoding()
