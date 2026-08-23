@@ -55,9 +55,18 @@ kernel void stepParticles(device Particle* particles [[buffer(0)]],
         float omega = angularFrequency(r, u.potential);
         velocity += gravity * u.dt;
         velocity -= velocity * (u.alpha * omega * u.dt);
+        float3 before = position;
         position += velocity * u.dt;
         r = length(position);
-        if (r < R_CAPTURE || r > R_ESCAPE) {
+        // Capture on the swept segment, not the endpoint: near the pole of
+        // the potential one substep can carry a plunging particle across
+        // the whole capture sphere, and the endpoint check would let it
+        // tunnel through and streak the disk at unphysical speed. The speed
+        // limit catches the same runaways from the other side.
+        float3 travel = position - before;
+        float along = clamp(-dot(before, travel) / max(dot(travel, travel), 1e-12f), 0.0f, 1.0f);
+        float closest = length(before + along * travel);
+        if (closest < R_CAPTURE || r > R_ESCAPE || length(velocity) > PLUNGE_SPEED_LIMIT) {
             p = spawn(i, p.respawns + 1u, u, inverseCdf, false);
             position = p.position;
             velocity = p.velocity;

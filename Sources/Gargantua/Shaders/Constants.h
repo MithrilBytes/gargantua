@@ -63,6 +63,10 @@
 // Source: gargantua design choice, see note.
 #define DRAG_ALPHA (0.003f)
 
+// No bound orbit in the Paczynski and Wiita potential moves faster than free fall from rest at infinity to the capture radius, sqrt(2 / (R_CAPTURE - 2)) = 10; anything beyond this margin is a particle the integrator kicked across the capture sphere in one step, and it is treated as captured.
+// Source: gargantua design choice, see note.
+#define PLUNGE_SPEED_LIMIT (12.0f)
+
 // Gaussian velocity dispersion per component as a fraction of the local circular speed, applied at seeding and respawn.
 // Source: gargantua design choice, see note.
 #define FEED_VELOCITY_DISPERSION (0.02f)
@@ -174,6 +178,10 @@
 // Stylized. The simulated gas speed is compressed to beta = ceiling tanh(v / ceiling) before the Doppler factor, since pseudo Newtonian orbits exceed c inside r of about 4; the innermost stable orbit speed 0.61 maps to 0.52, close to the Schwarzschild value 0.5.
 // Source: gargantua design choice, see note.
 #define GAS_SPEED_CEILING (0.85f)
+
+// Stylized. Doppler beaming blends in with min(density / floor, 1); below it only the gravitational redshift applies. A voxel holding one or two particles has no meaningful bulk velocity, and beaming it fully makes each plunging particle strobe as its velocity sweeps the camera direction. Forty per cubic M is about four particles in a default voxel.
+// Source: gargantua design choice, see note.
+#define BEAMING_DENSITY_FLOOR (40.0f)
 
 // Stylized. Extinction per unit path length per unit particle density; small so the far side of the disk and its lensed images stay visible.
 // Source: gargantua design choice, see note.

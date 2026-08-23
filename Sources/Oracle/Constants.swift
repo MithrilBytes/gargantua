@@ -132,6 +132,11 @@ public enum Constants {
         source: design,
         note: "Velocity space drag rate as a fraction of the local circular angular frequency; stands in for viscosity and drives the inward spiral.")
 
+    public static let plungeSpeedLimit = Constant<Double>(
+        "PLUNGE_SPEED_LIMIT", 12.0,
+        source: design,
+        note: "No bound orbit in the Paczynski and Wiita potential moves faster than free fall from rest at infinity to the capture radius, sqrt(2 / (R_CAPTURE - 2)) = 10; anything beyond this margin is a particle the integrator kicked across the capture sphere in one step, and it is treated as captured.")
+
     public static let feedVelocityDispersion = Constant<Double>(
         "FEED_VELOCITY_DISPERSION", 0.02,
         source: design,
@@ -271,6 +276,11 @@ public enum Constants {
         source: design,
         note: "Stylized. The simulated gas speed is compressed to beta = ceiling tanh(v / ceiling) before the Doppler factor, since pseudo Newtonian orbits exceed c inside r of about 4; the innermost stable orbit speed 0.61 maps to 0.52, close to the Schwarzschild value 0.5.")
 
+    public static let beamingDensityFloor = Constant<Double>(
+        "BEAMING_DENSITY_FLOOR", 40.0,
+        source: design,
+        note: "Stylized. Doppler beaming blends in with min(density / floor, 1); below it only the gravitational redshift applies. A voxel holding one or two particles has no meaningful bulk velocity, and beaming it fully makes each plunging particle strobe as its velocity sweeps the camera direction. Forty per cubic M is about four particles in a default voxel.")
+
     public static let volumeOpacity = Constant<Double>(
         "VOLUME_OPACITY", 0.0005,
         source: design,
@@ -312,13 +322,13 @@ public enum Constants {
     public static let all: [any ConstantEntry] = [
         schwarzschildRadius, photonSphere, isco, marginallyBound, criticalImpactParameter, weakDeflectionCoefficient,
         captureRadius, escapeRadius, diskOuterRadius, feedInnerRadius, diskSlabHalfHeight, volumeHalfExtent,
-        simulationTimestep, simulationSubsteps, dragAlpha, feedVelocityDispersion, diskAspectRatio,
+        simulationTimestep, simulationSubsteps, dragAlpha, plungeSpeedLimit, feedVelocityDispersion, diskAspectRatio,
         peakTemperature, zeroTorqueFloor, cicCorners, blackbodyMinTemperature, blackbodyMaxTemperature, blackbodyTableSize,
         stepCapInteractive, stepCapStill, stepRadiusFactor, stepMin, stepMax,
         emptyStepFactorInteractive, emptyStepMaxInteractive, emptyStepFactorStill, emptyStepMaxStill,
         marchThreadgroupWidth, marchThreadgroupHeight, bakeSamples, bakeSpacingVoxels, bakeFrames, sweepTableSize,
         driftBudgetInteractive, driftBudgetStill,
-        exposure, emissionScale, gasSpeedCeiling, volumeOpacity, starBrightness, stillSettleSteps, stillTile,
+        exposure, emissionScale, gasSpeedCeiling, beamingDensityFloor, volumeOpacity, starBrightness, stillSettleSteps, stillTile,
         commandBufferBudgetMilliseconds, memoryBudgetFraction, memoryBudgetCapBytes,
     ]
 }
