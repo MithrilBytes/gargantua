@@ -12,6 +12,8 @@ struct FrameStats {
     var fps: Double = 0
     var gpuWindowMax: Double = 0
     var gpuDisplayed: Double = 0
+    var cpuWindowSum: Double = 0
+    var cpuDisplayed: Double = 0
     private(set) var intervals: [Double] = []
     private(set) var gpuTimes: [Double] = []
     var recording = false
@@ -20,12 +22,15 @@ struct FrameStats {
         frames += 1
         if let previous {
             lastCpuInterval = now - previous
+            cpuWindowSum += lastCpuInterval
             if recording { intervals.append(lastCpuInterval) }
         }
         if fpsWindowStart == 0 { fpsWindowStart = now }
         fpsWindowFrames += 1
         if now - fpsWindowStart >= 0.5 {
             fps = Double(fpsWindowFrames) / (now - fpsWindowStart)
+            cpuDisplayed = cpuWindowSum / Double(fpsWindowFrames)
+            cpuWindowSum = 0
             fpsWindowStart = now
             fpsWindowFrames = 0
             gpuDisplayed = gpuWindowMax

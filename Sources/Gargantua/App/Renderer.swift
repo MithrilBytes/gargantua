@@ -141,7 +141,7 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
             particles: configuration.particles,
             seed: system.seed,
             fps: stats.fps,
-            cpuMilliseconds: stats.lastCpuInterval * 1000,
+            cpuMilliseconds: stats.cpuDisplayed * 1000,
             gpuMilliseconds: stats.gpuDisplayed * 1000,
             paused: paused,
             gpuErrors: stats.gpuErrors,
