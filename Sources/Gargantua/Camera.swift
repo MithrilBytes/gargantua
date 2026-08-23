@@ -8,7 +8,8 @@ struct OrbitCamera {
     var fovY: Float = 50.0 * .pi / 180.0
 
     static let minimumDistance: Float = 6.0
-    static let maximumDistance: Float = 220.0
+    /// Inside the escape radius, so every ray still starts inside the scene.
+    static let maximumDistance: Float = 56.0
     static let near: Float = 0.1
     static let far: Float = 1000.0
 
