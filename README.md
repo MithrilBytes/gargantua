@@ -242,7 +242,10 @@ fields, no turbulence. It looks like an accretion disk; it is not a
 simulation of one. With spin the rays are Kerr null geodesics in Boyer and
 Lindquist coordinates while the disk dynamics stay pseudo Newtonian, so
 frame dragging reaches the image through the lensing alone; the sweep
-table jump and the bake strategy are Schwarzschild only.
+table jump and the bake strategy are Schwarzschild only. Without the jump
+every ray integrates from the camera, so interactive spin runs near 8 fps
+on an M1 Pro; stills and sequences are the intended way to look at spin.
+A faint seam can appear on the polar axis where the coordinates pinch.
 
 MetalFX temporal upscaling can ghost during fast camera moves, since motion
 vectors come from straight line reprojection of lensed rays.
