@@ -1,0 +1,9 @@
+{
+  "name": "shadow_kerr",
+  "claim": "shadow asymmetry at spin 0.9 matches the oracle",
+  "kind": "relative",
+  "expected": 1.0,
+  "tolerance": 0.02,
+  "method": "At spin 0.9, bisect the equatorial capture boundary in aim angle on the prograde and retrograde sides of the line of sight from launchRadius, on the GPU through the probe kernel and in the oracle, with the still step policy and iterations rounds each. The asymmetry is the retrograde edge's xi = L / E over the prograde edge's, and the report is the GPU asymmetry divided by the oracle's.",
+  "parameters": { "spin": 0.9, "launchRadius": 52, "iterations": 40 }
+}

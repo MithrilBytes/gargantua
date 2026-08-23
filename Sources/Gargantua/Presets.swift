@@ -10,6 +10,7 @@ struct Configuration: Sendable {
     var marchWidth: Int
     var marchHeight: Int
     var seed: UInt64
+    var spin: Double
     var strategy: Strategy
     var fpsCap: Int
     var upscale: Bool
@@ -23,6 +24,7 @@ struct Configuration: Sendable {
             marchWidth: preset.marchSize.width,
             marchHeight: preset.marchSize.height,
             seed: options.seed,
+            spin: options.spin,
             strategy: options.strategy,
             fpsCap: options.fpsCap,
             upscale: options.upscale)

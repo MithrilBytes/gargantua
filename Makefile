@@ -3,6 +3,15 @@ BIN = .build/release/gargantua
 APP = Gargantua.app
 BASE ?= origin/main
 
+# Command Line Tools installs package Swift Testing as a framework where
+# swift test does not look; Xcode toolchains need none of this.
+DEVDIR := $(shell xcode-select -p 2>/dev/null)
+ifeq ($(DEVDIR),/Library/Developer/CommandLineTools)
+TESTFLAGS := -Xswiftc -F$(DEVDIR)/Library/Developer/Frameworks \
+	-Xlinker -rpath -Xlinker $(DEVDIR)/Library/Developer/Frameworks \
+	-Xlinker -rpath -Xlinker $(DEVDIR)/Library/Developer/usr/lib
+endif
+
 .PHONY: build release test check app constants hooks clean lint-commits dashes
 
 build:
@@ -12,7 +21,7 @@ release:
 	$(SWIFT) build -c release
 
 test:
-	$(SWIFT) test
+	$(SWIFT) test $(TESTFLAGS)
 
 check: test dashes lint-commits
 

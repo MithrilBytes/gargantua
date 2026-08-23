@@ -77,6 +77,7 @@ gargantua                          interactive window, default preset
 gargantua --preset small|default|max
 gargantua --particles N --volume 96|128|192|256 --seed S
 gargantua --strategy march|bake
+gargantua --spin 0.9                turn the hole; Kerr rays, march strategy only
 gargantua --fps-cap 30|60
 gargantua --no-upscale             present the march resolution directly
 gargantua --still out.png --width 3840 --height 2160
@@ -169,6 +170,7 @@ Computed, and held to the oracle by `gargantua validate`:
 | beaming                  | approaching to receding brightness ratio vs oracle render | 10 percent |
 | sky                      | sky directions from the sweep tables match the oracle far out | under 1e-3 rad |
 | jump                     | the image with the sphere jump matches the full integration | 1 percent |
+| shadow_kerr              | shadow asymmetry at spin 0.9 matches the oracle | 2 percent |
 
 The goldens are data in `goldens/`; `swift test` holds the oracle to the
 same files and `validate` holds the GPU to them. The splat pass is excluded
@@ -237,7 +239,10 @@ and in `validate`.
 
 The disk is particles with drag, not fluid. No pressure, no magnetic
 fields, no turbulence. It looks like an accretion disk; it is not a
-simulation of one.
+simulation of one. With spin the rays are Kerr null geodesics in Boyer and
+Lindquist coordinates while the disk dynamics stay pseudo Newtonian, so
+frame dragging reaches the image through the lensing alone; the sweep
+table jump and the bake strategy are Schwarzschild only.
 
 MetalFX temporal upscaling can ghost during fast camera moves, since motion
 vectors come from straight line reprojection of lensed rays.
@@ -281,6 +286,9 @@ make hooks
 
 installs the commit hooks that enforce the commit title rule and the dash
 rule. `make check` runs the tests, the dash scan and the commit title lint.
+On a Mac with only the Command Line Tools, run tests through `make test`:
+those installs package Swift Testing as a framework where plain
+`swift test` does not look, and the Makefile adds the search path.
 `make constants` regenerates the Metal constants header from the Swift
 source of truth; a style test fails if the two drift. `swift test -c
 release` runs the suite in well under a second; the debug build takes about

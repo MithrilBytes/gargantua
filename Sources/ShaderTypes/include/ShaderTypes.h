@@ -136,7 +136,8 @@ typedef struct {
     float cameraMaxB;
     float skyMinB;
     float skyMaxB;
-    float padding2;
+    /// Black hole spin in units of M; zero renders Schwarzschild.
+    float spin;
     /// Subpixel sample offset in input pixels, for temporal upscaling.
     simd_float2 jitter;
     GeodesicSettings geodesic;

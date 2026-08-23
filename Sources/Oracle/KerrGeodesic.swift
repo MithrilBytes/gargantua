@@ -214,7 +214,10 @@ public enum KerrGeodesic {
     public static func stepLength(_ s: Spacetime, _ state: RayState, settings: Settings) -> Double {
         let aboveHorizon = state.r - s.outerHorizon
         let near = 0.2 * aboveHorizon
-        return min(max(min(settings.stepFactor * state.r, near), settings.stepMin), settings.stepMax)
+        // Mirrors the kernel: shrink toward the polar axis, where the
+        // coordinates pinch and theta turning points are easy to overshoot.
+        let pole = min(max(sin(state.theta) / 0.08, 0.05), 1.0)
+        return min(max(min(settings.stepFactor * state.r, near) * pole, 0.4 * settings.stepMin), settings.stepMax)
     }
 
     public static func integrate(_ s: Spacetime, from launch: RayState, settings: Settings) -> Result {
@@ -238,6 +241,24 @@ public enum KerrGeodesic {
             }
         }
         return Result(state: state, outcome: .exhausted, steps: steps, drift: drift)
+    }
+
+    /// Bisect the equatorial capture boundary in aim angle on one side of
+    /// the line of sight and return xi = L / E there, the impact parameter
+    /// of the shadow edge as seen from `radius`. Side +1 aims prograde.
+    public static func bisectCriticalXi(spin: Double, fromRadius radius: Double, side: Double,
+                                        settings: Settings, iterations: Int = 44) -> Double {
+        let s = Spacetime(spin: spin)
+        var low = 0.0
+        var high = 12.0 / radius
+        for _ in 0..<iterations {
+            let aim = 0.5 * (low + high)
+            let launchState = launch(s, from: SIMD3(radius, 0.0, 0.0), direction: SIMD3(-1.0, side * aim, 0.0))
+            let result = integrate(s, from: launchState, settings: settings)
+            if result.outcome == .captured { low = aim } else { high = aim }
+        }
+        let boundary = launch(s, from: SIMD3(radius, 0.0, 0.0), direction: SIMD3(-1.0, side * 0.5 * (low + high), 0.0))
+        return boundary.angularMomentum / boundary.energy
     }
 
     /// Impact parameters of the shadow edge for a spherical photon orbit at

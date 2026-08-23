@@ -67,7 +67,7 @@ final class MarchPass {
     static func uniforms(camera: OrbitCamera, jitter: SIMD2<Float> = SIMD2(0, 0),
                          width: Int, height: Int, tileOrigin: (Int, Int) = (0, 0),
                          settings: Schwarzschild.Settings, driftBudget: Double, redshift: Bool, starSeed: UInt32, stars: Bool = true,
-                         bakeSpacing: Float = 0, tables: DeflectionTables? = nil) -> MarchUniforms {
+                         bakeSpacing: Float = 0, tables: DeflectionTables? = nil, spin: Double = 0) -> MarchUniforms {
         let tanHalf = tan(camera.fovY * 0.5)
         var uniforms = MarchUniforms(
             cameraPosition: camera.position,
@@ -85,10 +85,12 @@ final class MarchPass {
             redshift: redshift ? 1 : 0,
             bakeSpacing: bakeSpacing,
             bakeCapacity: Constants.bakeSamples.value,
-            sphereRadius: 0, cameraRadius: 0, sphereMaxB: 0, sphereTableMaxB: 0, cameraMaxB: 0, skyMinB: 0, skyMaxB: 0, padding2: 0,
+            sphereRadius: 0, cameraRadius: 0, sphereMaxB: 0, sphereTableMaxB: 0, cameraMaxB: 0, skyMinB: 0, skyMaxB: 0, spin: Float(spin),
             jitter: jitter,
             geodesic: MarchPass.settings(settings))
-        if let tables {
+        if let tables, spin == 0 {
+            // The sweep tables assume spherical symmetry; spinning holes
+            // integrate every ray in full.
             tables.update(cameraRadius: Double(camera.distance))
             tables.apply(to: &uniforms)
         }

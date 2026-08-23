@@ -59,6 +59,9 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         if configuration.preset.gated {
             Console.line(configuration.preset.thermalNote)
         }
+        if configuration.spin > 0, configuration.strategy == .bake {
+            Exit.usage("The bake strategy does not support spin yet; use the march strategy.")
+        }
 
         view.colorPixelFormat = .bgra8Unorm_srgb
         view.depthStencilPixelFormat = .invalid
@@ -159,7 +162,8 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
         let uniforms = MarchPass.uniforms(camera: camera, jitter: jitter, width: hdr.width, height: hdr.height,
                                           settings: .interactive, driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
                                           starSeed: UInt32(truncatingIfNeeded: system.seed),
-                                          bakeSpacing: bakePass?.spacing(volumeSize: volume.size) ?? 0, tables: marchPass.tables)
+                                          bakeSpacing: bakePass?.spacing(volumeSize: volume.size) ?? 0, tables: marchPass.tables,
+                                          spin: configuration.spin)
         previousCamera = camera
         if walking, let bakePass, let targets = marchPass.targets {
             bakePass.encodeWalk(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody, targets: targets)
@@ -252,6 +256,9 @@ final class Renderer: NSObject, MTKViewDelegate, InputHandler {
 
     private func rendererDescription() -> String {
         var march = "march \(configuration.marchWidth) by \(configuration.marchHeight)"
+        if configuration.spin > 0 {
+            march += String(format: ", spin %.3f", configuration.spin)
+        }
         if let bakePass {
             march = walkedLastFrame ? "walk of \(configuration.marchWidth) by \(configuration.marchHeight) bake (\(bakePass.overflowCount) rays over budget)" : "march \(configuration.marchWidth) by \(configuration.marchHeight), baking \(bakePass.bakedRows) of \(bakePass.height) rows"
         }
