@@ -52,7 +52,7 @@ enum Still {
                 let origin = (column * tile, row * tile)
                 let uniforms = MarchPass.uniforms(camera: camera, width: width, height: height, tileOrigin: origin, settings: .still,
                                                   driftBudget: Constants.driftBudgetStill.value, redshift: true, starSeed: UInt32(truncatingIfNeeded: configuration.seed),
-                                                  tables: marchPass.tables)
+                                                  tables: marchPass.tables, spin: configuration.spin)
                 let commandBuffer = context.makeCommandBuffer(label: "still tile")
                 marchPass.encodeImage(commandBuffer, uniforms: uniforms, volume: volume, blackbody: system.blackbody, targets: targets, counters: nil)
                 guard let blit = commandBuffer.makeBlitCommandEncoder() else {
@@ -77,7 +77,8 @@ enum Still {
                 splatPass.encode(commandBuffer, system: system, volume: volume)
                 let frameUniforms = MarchPass.uniforms(camera: camera, width: 960, height: 540, settings: .interactive,
                                                        driftBudget: Constants.driftBudgetInteractive.value, redshift: true,
-                                                       starSeed: UInt32(truncatingIfNeeded: configuration.seed), tables: marchPass.tables)
+                                                       starSeed: UInt32(truncatingIfNeeded: configuration.seed), tables: marchPass.tables,
+                                                       spin: configuration.spin)
                 marchPass.encodeImage(commandBuffer, uniforms: frameUniforms, volume: volume, blackbody: system.blackbody, targets: sequenceTargets, counters: nil)
                 commandBuffer.commit()
                 commandBuffer.waitUntilCompleted()

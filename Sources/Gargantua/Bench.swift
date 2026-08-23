@@ -126,6 +126,9 @@ enum Bench {
     static func run(_ options: Options) -> Never {
         let context = GpuContext()
         var configuration = Configuration.make(options)
+        if configuration.spin > 0 {
+            Exit.usage("The bench measures the Schwarzschild pipeline; run it without spin.")
+        }
         configuration.strategy = .bake
         let extra = UInt64(outputWidth * outputHeight) * 12
         if let refusal = context.budget.refusal(bytes: configuration.bytes + extra, describing: "The bench at preset \(configuration.preset.rawValue)") {

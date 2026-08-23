@@ -53,6 +53,8 @@ struct Options: Sendable {
     var sequence: Int?
     /// Starting camera as azimuth, elevation, distance.
     var camera: (azimuth: Double, elevation: Double, distance: Double)?
+    /// Black hole spin in units of M; zero is Schwarzschild.
+    var spin: Double = 0
 
     static let usage = """
     usage: gargantua [--preset small|default|max] [--particles N] [--volume 96|128|192|256] [--seed S] \
@@ -114,6 +116,12 @@ struct Options: Sendable {
                     options.soakSeconds = seconds
                 case "--sweep": options.sweep = true
                 case "--sequence": options.sequence = try integer(for: argument)
+                case "--spin":
+                    let text = try value(for: argument)
+                    guard let spin = Double(text), spin >= 0, spin <= 0.998 else {
+                        throw UsageError(sentence: "spin must be between 0 and 0.998.")
+                    }
+                    options.spin = spin
                 case "--camera":
                     let text = try value(for: argument)
                     let parts = text.split(separator: ",").compactMap { Double($0) }

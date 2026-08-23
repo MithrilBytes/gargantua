@@ -14,7 +14,7 @@ enum Validate {
         let passed: Bool
     }
 
-    static let order = ["isco", "determinism", "shadow", "deflection", "conservation_interactive", "conservation_still", "parity", "beaming", "sky", "jump"]
+    static let order = ["isco", "determinism", "shadow", "deflection", "conservation_interactive", "conservation_still", "parity", "beaming", "sky", "jump", "shadow_kerr"]
 
     static func run(_ options: Options) -> Never {
         let context = GpuContext()
@@ -46,6 +46,7 @@ enum Validate {
             case "beaming": rows.append(beaming(golden, context: context, system: system, volume: volume, splatPass: splatPass, marchPass: marchPass))
             case "sky": rows.append(sky(golden, probes: probes))
             case "jump": rows.append(jump(golden, context: context, system: system, volume: volume, marchPass: marchPass))
+            case "shadow_kerr": rows.append(shadowKerr(golden, probes: probes))
             default: break
             }
         }
@@ -342,6 +343,34 @@ enum Validate {
         }
         let measured = total > 0 ? difference / total : 1.0
         return Row(golden: golden, measured: String(format: "mean relative difference %.2e", measured), passed: golden.passes(measured))
+    }
+
+    /// The Kerr shadow's equatorial asymmetry, GPU against oracle, both by
+    /// bisection from the same radius with the same launch convention.
+    static func shadowKerr(_ golden: Golden, probes: Probes) -> Row {
+        let spin = golden.parameter("spin")
+        let radius = golden.parameter("launchRadius")
+        let iterations = Int(golden.parameter("iterations"))
+        func gpuXi(side: Double) -> Double {
+            var low = 0.0
+            var high = 12.0 / radius
+            for _ in 0..<iterations {
+                let aim = 0.5 * (low + high)
+                let launch = Probes.Launch(origin: SIMD3(radius, 0.0, 0.0), direction: SIMD3(-1.0, side * aim, 0.0))
+                let result = probes.run([launch], settings: .still, spin: spin)[0]
+                if result.outcome == RayCaptured { low = aim } else { high = aim }
+            }
+            let boundary = KerrGeodesic.launch(KerrGeodesic.Spacetime(spin: spin), from: SIMD3(radius, 0.0, 0.0),
+                                               direction: SIMD3(-1.0, side * 0.5 * (low + high), 0.0))
+            return boundary.angularMomentum / boundary.energy
+        }
+        let oracleSettings = KerrGeodesic.Settings(stepCap: Int(Constants.stepCapStill.value))
+        let gpuAsymmetry = abs(gpuXi(side: -1.0) / gpuXi(side: 1.0))
+        let oraclePrograde = KerrGeodesic.bisectCriticalXi(spin: spin, fromRadius: radius, side: 1.0, settings: oracleSettings, iterations: iterations)
+        let oracleRetrograde = KerrGeodesic.bisectCriticalXi(spin: spin, fromRadius: radius, side: -1.0, settings: oracleSettings, iterations: iterations)
+        let oracleAsymmetry = abs(oracleRetrograde / oraclePrograde)
+        let measured = gpuAsymmetry / oracleAsymmetry
+        return Row(golden: golden, measured: String(format: "gpu %.4f vs oracle %.4f, ratio %.4f", gpuAsymmetry, oracleAsymmetry, measured), passed: golden.passes(measured))
     }
 
     /// 64 bit FNV-1a over the raw particle bytes.

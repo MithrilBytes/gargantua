@@ -1,4 +1,5 @@
 #include "Geodesic.h"
+#include "Kerr.h"
 
 // Pass 3. One thread per ray. Each ray is a null geodesic integrated from
 // the eye; inside the volume cube it gathers emission with front to back
@@ -115,6 +116,73 @@ static MarchResult marchRay(PlaneRay launched, constant MarchUniforms& u, bool g
     return result;
 }
 
+// The Kerr twin of marchRay: same gather, Boyer and Lindquist stepping,
+// capture at the horizon margin, Carter constant and null residual as the
+// drift gauge. No sweep table jump: the bending is not a function of one
+// impact parameter off the axis of symmetry.
+static MarchResult marchRayKerr(KerrRayState launched, constant MarchUniforms& u, bool gather,
+                                texture3d<half, access::sample> emission,
+                                texture3d<half, access::sample> velocity,
+                                thread KerrRayState& rayOut) {
+    KerrRayState ray = launched;
+    float carter0 = kerrCarter(u.spin, launched);
+    float scale = max(abs(carter0), launched.energy * launched.energy);
+    float captureRadius = kerrOuterHorizon(u.spin) + KERR_CAPTURE_MARGIN;
+    float3 color = float3(0.0f);
+    float transmittance = 1.0f;
+    float3 previous = kerrPosition(u.spin, ray);
+    uint outcome = RayExhausted;
+    uint steps = 0u;
+    float travelled = 0.0f;
+    float weightedDepth = 0.0f;
+    float depthWeight = 0.0f;
+    float drift = 0.0f;
+    for (uint k = 0u; k < STEP_CAP_STILL; ++k) {
+        if (k >= u.geodesic.stepCap) break;
+        ray = kerrStep(u.spin, ray, kerrStepLength(u.spin, ray, u.geodesic));
+        steps = k + 1u;
+        float3 position = kerrPosition(u.spin, ray);
+        float pathLength = length(position - previous);
+        travelled += pathLength;
+        float carterDrift = abs(kerrCarter(u.spin, ray) - carter0) / scale;
+        float nullDrift = abs(kerrNullResidual(u.spin, ray)) / (scale * max(ray.r * ray.r, 1.0f));
+        drift = max(drift, max(carterDrift, nullDrift));
+        if (ray.r <= captureRadius) { outcome = RayCaptured; break; }
+        if (gather && abs(position.z) < DISK_SLAB_HALF_HEIGHT && all(abs(position.xy) < u.volumeHalfExtent) && transmittance > 0.004f) {
+            Sample s = sampleVolume(position, u.volumeHalfExtent, emission, velocity);
+            if (s.density > 0.0f) {
+                float g3 = 1.0f;
+                if (u.redshift != 0u) {
+                    float fKerr = 1.0f - 2.0f * ray.r / kerrSigma(u.spin, ray.r, ray.theta);
+                    float g = redshiftFactor(max(fKerr, 0.0f), kerrDirection(u.spin, ray), s.velocity);
+                    float gravity = sqrt(max(fKerr, 0.0f));
+                    float bulk = min(s.density / BEAMING_DENSITY_FLOOR, 1.0f);
+                    g3 = mix(gravity * gravity * gravity, g * g * g, bulk);
+                }
+                float alpha = 1.0f - exp(-u.opacityScale * s.density * pathLength);
+                float3 contribution = transmittance * s.emission * g3 * pathLength;
+                color += contribution;
+                float weight = dot(contribution, float3(0.2126f, 0.7152f, 0.0722f));
+                weightedDepth += weight * travelled;
+                depthWeight += weight;
+                transmittance *= 1.0f - alpha;
+            }
+        }
+        previous = position;
+        if (ray.r >= u.geodesic.escapeRadius) { outcome = RayEscaped; break; }
+    }
+    rayOut = ray;
+    MarchResult result;
+    result.color = color;
+    result.transmittance = transmittance;
+    result.drift = drift;
+    result.steps = steps;
+    result.outcome = outcome;
+    result.leftSphere = false;
+    result.depth = depthWeight > 0.0f ? weightedDepth / depthWeight : travelled;
+    return result;
+}
+
 // Sky direction for a ray that ended: the exact asymptote when it left the
 // sphere, otherwise its last direction, the least wrong thing to draw for
 // rays that ran out of steps or reached the escape radius.
@@ -148,6 +216,36 @@ kernel void marchImage(texture2d<half, access::write> output [[texture(0)]],
         float2 ndc = float2((2.0f * sample.x / float(u.resolution.x) - 1.0f) * u.tanHalfFov.x,
                             (1.0f - 2.0f * sample.y / float(u.resolution.y)) * u.tanHalfFov.y);
         float3 direction = normalize(u.cameraForward + ndc.x * u.cameraRight + ndc.y * u.cameraUp);
+        if (u.spin > 0.0f) {
+            KerrRayState kerrRay;
+            MarchResult m = marchRayKerr(kerrLaunch(u.spin, u.cameraPosition, direction), u, true, emission, velocity, kerrRay);
+            color = m.color;
+            drift = m.drift;
+            steps = m.steps;
+            outcome = m.outcome;
+            bool fallsIn = outcome == RayCaptured || (outcome == RayExhausted && kerrRay.pr < 0.0f);
+            if (!fallsIn) {
+                color += m.transmittance * u.starBrightness * starfield(kerrDirection(u.spin, kerrRay), u.starSeed, blackbody);
+            }
+            output.write(half4(half3(color), 1.0h), local);
+            debug.write(half4(half(drift), half(float(steps)), half(float(outcome)), 1.0h), local);
+            depthOut.write(float4(min(m.depth / (2.0f * R_ESCAPE), 1.0f), 0.0f, 0.0f, 0.0f), local);
+            motionOut.write(half4(0.0h), local);
+            uint kerrOver = drift > u.driftBudget ? 1u : 0u;
+            uint kerrExhausted = outcome == RayExhausted ? 1u : 0u;
+            uint kerrCaptured = outcome == RayCaptured ? 1u : 0u;
+            uint kerrSumRays = simd_sum(1u);
+            uint kerrSumOver = simd_sum(kerrOver);
+            uint kerrSumExhausted = simd_sum(kerrExhausted);
+            uint kerrSumCaptured = simd_sum(kerrCaptured);
+            if (simd_is_first()) {
+                atomic_fetch_add_explicit(&counters[0], kerrSumRays, memory_order_relaxed);
+                atomic_fetch_add_explicit(&counters[1], kerrSumOver, memory_order_relaxed);
+                atomic_fetch_add_explicit(&counters[2], kerrSumExhausted, memory_order_relaxed);
+                atomic_fetch_add_explicit(&counters[3], kerrSumCaptured, memory_order_relaxed);
+            }
+            return;
+        }
         PreparedRay prepared = prepareRay(u.cameraPosition, direction, u, sphereSweep, cameraSweep, skySweep);
         float depth = 2.0f * R_ESCAPE;
         if (prepared.skyOnly) {
@@ -202,6 +300,21 @@ kernel void probeRays(device const RayProbe* probes [[buffer(0)]],
                       uint i [[thread_position_in_grid]]) {
     if (i >= count) return;
     RayProbe probe = probes[i];
+    if (u.spin > 0.0f) {
+        KerrRayState kerrRay;
+        MarchResult m = marchRayKerr(kerrLaunch(u.spin, float3(probe.origin), float3(probe.direction)), u, false, emission, velocity, kerrRay);
+        RayProbeResult kr;
+        float3 position = kerrPosition(u.spin, kerrRay);
+        kr.position = position;
+        kr.direction = kerrDirection(u.spin, kerrRay);
+        kr.drift = m.drift;
+        kr.outcome = m.outcome;
+        kr.steps = m.steps;
+        kr.energy = kerrRay.energy;
+        kr.angularMomentum = kerrRay.angularMomentum;
+        results[i] = kr;
+        return;
+    }
     PreparedRay prepared = prepareRay(float3(probe.origin), float3(probe.direction), u, sphereSweep, cameraSweep, skySweep);
     RayProbeResult r;
     if (prepared.skyOnly) {
