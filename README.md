@@ -1,32 +1,36 @@
 # gargantua
 
-A GPU particle accretion disk around a black hole, rendered through real
-gravitational lensing. Native macOS on Apple silicon, written in Swift and
-Metal with no third party dependencies.
+A GPU accretion disk around a black hole, lensed by the black hole
+itself. It's a native macOS app for Apple silicon, written in Swift and
+Metal, with nothing outside Apple's frameworks underneath.
 
 ![A lensed accretion disk around a black hole](docs/gargantua.jpg)
 
-The physics is honest where it counts. Particles orbit and spiral inward
-in a pseudo Newtonian potential with the correct innermost stable orbit,
-and camera rays are integrated as null geodesics of the Schwarzschild
-metric (Kerr with `--spin`), so the shadow, the photon ring and the
-lensing are computed rather than painted. A double precision CPU oracle
-checks the renderer's claims, and `gargantua validate` reruns those checks
-on your GPU. Where the image is stylized instead of computed, the constant
-responsible is named in `Sources/Oracle/Constants.swift` with a citation.
+The lensing is the real thing. Camera rays get integrated as null
+geodesics of the Schwarzschild metric (or Kerr, if you pass `--spin`), so
+the shadow and the photon ring fall out of the math instead of being
+drawn in by hand. The particles follow a pseudo Newtonian potential that
+puts the innermost stable orbit in the right place. Everything the
+renderer claims about physics gets checked twice: a double precision
+oracle on the CPU defines the right answers, and `gargantua validate`
+makes sure your GPU agrees with them. Some things are deliberately fudged
+to look good on a monitor, and every one of those fudges is a named
+constant in `Sources/Oracle/Constants.swift` with a citation next to it.
 
-It runs as an ordinary user process: no network, no admin rights, no
-background agents, and it writes only files you ask for (screenshots,
-stills, bench reports). GPU work is split into short command buffers so a
-bad kernel cannot hang the desktop, and memory is budgeted before it is
-allocated, at most 40 percent of the device's recommended working set or
-3 GB, whichever is smaller. Configurations over budget are refused.
+It's an ordinary user process that never touches the network and only
+writes files you asked for (screenshots, stills, bench reports). I was
+careful with the GPU: work is split into short command buffers so a
+misbehaving kernel can't hang your desktop, and memory gets budgeted up
+front (at most 40 percent of the device's recommended working set, capped
+at 3 GB) before anything is allocated. If a configuration would blow the
+budget, the app says so and quits rather than trying.
 
 ## Requirements
 
-An Apple silicon Mac (M1 or newer, 8 GB or more) on macOS 14 or newer,
-with Swift 6.0 or newer. The Command Line Tools are enough; full Xcode is
-not needed. Shaders ship as source and are compiled at launch.
+Any Apple silicon Mac (M1 or newer, 8 GB or more) running macOS 14 or
+later, plus Swift 6.0. The Command Line Tools are all you need, since the
+shaders ship as source and get compiled when the app launches. You never
+have to open Xcode.
 
 ## Build and run
 
@@ -54,8 +58,9 @@ gargantua bench                    time the passes, write bench/results/<date>.j
 gargantua validate                 run the goldens on this machine's GPU
 ```
 
-Errors go to stderr with a nonzero exit: 2 for an operational failure, 64
-for a usage mistake, 1 from `validate` when a golden fails.
+When something goes wrong you get one line on stderr and a nonzero exit:
+2 for an operational failure, 64 for a usage mistake, and 1 from
+`validate` when a golden fails.
 
 | Input        | Action                                          |
 | ------------ | ----------------------------------------------- |
@@ -79,37 +84,44 @@ for a usage mistake, 1 from `validate` when a golden fails.
 
 Four passes per frame:
 
-1. **sim** steps every particle with semi implicit Euler in the Paczynski
-   and Wiita potential plus a small drag that drives the inflow. Captured
-   and escaped particles respawn in a feeding annulus. No atomics, so a
-   fixed seed reproduces the run bit for bit.
-2. **splat** bins particles into a 3D emission and velocity field with
-   fixed point atomics, then resolves to half precision textures.
+1. **sim** moves every particle a step through the Paczynski and Wiita
+   potential with semi implicit Euler, plus a little drag to drive the
+   slow spiral inward. Particles that fall in or fly away respawn in a
+   feeding annulus. The kernel avoids atomics entirely, which is why a
+   fixed seed reproduces a run bit for bit.
+2. **splat** gathers the particles into a 3D emission and velocity field
+   using fixed point atomics, then resolves that into half precision
+   textures.
 3. **march** traces one null geodesic per ray with fourth order Runge
-   Kutta, samples the volume inside the disk slab, shifts the emission by
-   the redshift factor cubed (gravitational plus Doppler), and composites
-   front to back. Outside r = 30 there is nothing to sample, so rays cross
-   the empty region analytically using precomputed deflection tables
-   (`docs/lab/01-sweep-tables.md`). Escaped rays shade a procedural
-   starfield; captured rays are black.
+   Kutta. While a ray is inside the disk slab it samples the volume,
+   scales the emission by the redshift factor cubed (gravitational and
+   Doppler together), and composites front to back. Once a ray is outside
+   r = 30 there's nothing left to sample, so it crosses the empty stretch
+   analytically using precomputed deflection tables
+   (`docs/lab/01-sweep-tables.md`). Rays that escape to infinity pick up
+   a procedural starfield, and rays that fall in stay black.
 4. **present** upscales the march resolution to the window with MetalFX
-   temporal upscaling and tone maps with the Khronos PBR Neutral curve.
+   temporal upscaling and runs the result through the Khronos PBR Neutral
+   tone curve.
 
-`--strategy bake` integrates each ray once per camera position and stores
-its sample points (about 400 MB at 960 by 540); a frame is then only
-texture walks, and moving the camera falls back to the march. Rays that
-need more than 96 stored samples lose their tail; `bench` reports how
-many. `gargantua bench` times both strategies.
+`--strategy bake` takes a different route: it integrates each ray once
+per camera position and stores the sample points (about 400 MB worth at
+960 by 540), after which a frame is just texture walks. Move the camera
+and it falls back to marching until you stop. A ray that needs more than
+96 stored samples loses its tail, and `bench` will tell you how many did.
+`gargantua bench` times both strategies so you can compare on your own
+machine.
 
-Units are geometrized, G = c = M = 1. The horizon sits at r = 2, the
-photon sphere at 3, the innermost stable circular orbit at 6, the critical
-impact parameter at 3 sqrt(3), and the disk is fed from an annulus between
-20 and 24.
+Everything is in geometrized units, G = c = M = 1, which puts the horizon
+at r = 2, the photon sphere at 3, the innermost stable circular orbit at
+6, and the critical impact parameter at 3 sqrt(3). The disk gets fed from
+an annulus between 20 and 24.
 
 ## Validation
 
-`gargantua validate` holds the GPU to the same golden files that
-`swift test` holds the oracle to. The goldens are data in `goldens/`:
+The same golden files keep both sides honest: `swift test` checks the
+oracle against them on any machine, and `gargantua validate` checks your
+GPU against them. They live as plain data in `goldens/`:
 
 | Golden                   | Claim                                                   | Bar          |
 | ------------------------ | ------------------------------------------------------- | ------------ |
@@ -125,48 +137,54 @@ impact parameter at 3 sqrt(3), and the disk is fed from an annulus between
 | jump                     | image with the sphere jump matches full integration     | 1 percent    |
 | shadow_kerr              | shadow asymmetry at spin 0.9 matches the oracle         | 2 percent    |
 
-The splat pass sits outside the determinism golden because atomic
-accumulation order is not deterministic. The deliberate departures from
-physics (a peak temperature of 8000 K instead of X rays, a smooth velocity
-compression below c for the beaming, the exposure and opacity constants)
-are all named and sourced in `Sources/Oracle/Constants.swift`.
+The splat pass is left out of the determinism golden because atomic
+accumulation order varies from run to run. As for the fudges: the disk
+peaks at 8000 K because a real one peaks in X rays your monitor can't
+show, the beaming velocity gets smoothly compressed below c, and the
+exposure and opacity constants are pure taste. Each one is named and
+sourced in `Sources/Oracle/Constants.swift`.
 
 ## Performance
 
-On an M1 Pro with a 16 core GPU the default preset marches a frame in
-about 15 ms and walks a baked one in about 6.5 ms. Dated bench reports are
-committed in `bench/results/` and the optimization notes, with the
-measurements that motivated each change, in `docs/lab/`.
+On my M1 Pro (16 GPU cores) the default preset marches a frame in about
+15 ms and walks a baked one in about 6.5 ms. Dated bench reports live in
+`bench/results/`, and the notes in `docs/lab/` walk through each
+optimization with the measurements that motivated it.
 
 ## Known limits
 
-The GPU is fp32. With unit scaling, horizon regular coordinates and
-monitored conserved quantities, a 4096 step ray drifts by 2.3e-6 relative
-on this hardware, while the double precision oracle under the same step
-policy drifts 2e-7, so the step policy sets the accuracy floor, not the
-precision. Interactive rays passing near the hole hit the 256 step cap
-(about a fifth of the default view); their fate is still decided exactly,
-and the hud shows the count.
+The GPU only does fp32. Between unit scaling, horizon regular coordinates
+and the monitored conserved quantities, a 4096 step ray drifts by about
+2.3e-6 relative on my hardware, and since the double precision oracle
+drifts 2e-7 under the same step policy, the step policy is the real
+accuracy floor rather than the arithmetic. In the interactive window,
+rays passing close to the hole hit the 256 step cap (about a fifth of the
+default view). Their fate is still decided exactly, and the hud counts
+them if you're curious.
 
-The disk is particles with drag, not a fluid. No pressure, no magnetic
-fields, no turbulence. It looks like an accretion disk; it is not a
-simulation of one. Lensing applies to the volume and the background, not
-particle by particle, so double images come from a ray crossing the volume
-twice, which is correct in aggregate.
+The disk is a cloud of particles with drag, so you won't find pressure,
+magnetic fields or real turbulence in here. It makes a convincing picture
+of an accretion disk without being a serious simulation of one. Lensing
+is also applied to the volume as a whole rather than to individual
+particles, which means a doubled image comes from a ray crossing the
+volume twice. That's correct in aggregate and slightly wrong per
+particle.
 
-With `--spin` the rays are Kerr null geodesics in Boyer and Lindquist
-coordinates while the disk stays pseudo Newtonian, so frame dragging
-reaches the image through the lensing alone. The deflection table shortcut
-is Schwarzschild only, so interactive spin runs near 8 fps on an M1 Pro;
-stills are the intended way to look at spin. A faint seam can appear on
-the polar axis where the coordinates pinch.
+Passing `--spin` switches the rays to Kerr null geodesics in Boyer and
+Lindquist coordinates while the disk keeps its pseudo Newtonian dynamics,
+so frame dragging reaches the image entirely through the lensing. The
+deflection table shortcut only exists for Schwarzschild, which drops
+interactive spin to around 8 fps on an M1 Pro, so spin is best enjoyed
+through stills. You may also spot a faint seam on the polar axis where
+the coordinates pinch.
 
-MetalFX runs with zero motion vectors, which measured better against
-ground truth than every reprojection variant tried
-(`docs/lab/06-pulsing-round-two.md`). Fast camera moves can still ghost;
-`--no-upscale` renders natively for clean captures. Fanless machines
-throttle under the max preset; the program stays correct and smooth at
-whatever clock the OS grants.
+MetalFX runs with zero motion vectors, which sounds wrong but measured
+better against ground truth than every reprojection variant I tried
+(`docs/lab/06-pulsing-round-two.md`). Fast camera moves can still ghost a
+little, and `--no-upscale` gives you a clean native render for captures.
+On fanless machines the max preset will throttle after a few minutes.
+Nothing breaks when that happens, the clock just drops and the fps
+counter shows it.
 
 ## Development
 
@@ -174,17 +192,17 @@ whatever clock the OS grants.
 make hooks
 ```
 
-installs the commit hooks, which keep commit titles in the house format.
-`make check` runs the tests and the commit lint. On a Mac with only the Command Line Tools, test through
-`make test`: those installs put Swift Testing where plain `swift test`
-does not look. `make constants` regenerates the Metal constants header
-from the Swift source of truth.
+sets up the repo's commit hooks. `make check` runs the tests plus the
+commit lint. If your Mac only has the Command Line Tools, run tests
+through `make test`: those installs put Swift Testing somewhere plain
+`swift test` doesn't look, and the Makefile knows where. `make constants`
+regenerates the Metal constants header from the Swift source of truth.
 
 CI builds the release binary and runs the CPU side tests on every push.
-GPU validation is local, because a hosted runner's GPU is not dependable
-enough to gate a merge on. The soak harness runs the window unattended,
-prints a timing summary, takes a screenshot and exits through a chosen
-path:
+GPU validation stays local since hosted runners' GPUs aren't dependable
+enough to gate a merge on. There's also a soak harness that runs the
+window unattended, prints a timing summary, grabs a screenshot and exits
+through whichever path you pick:
 
 ```bash
 .build/release/gargantua --soak 600 --quit esc
@@ -192,8 +210,8 @@ path:
 
 ## References
 
-Every constant carries its own citation in
-`Sources/Oracle/Constants.swift`; the core references are:
+Every constant in `Sources/Oracle/Constants.swift` carries its own
+citation. The big ones:
 
 1. Paczynski, B. and Wiita, P. J., 1980. Thick accretion disks and
    supercritical luminosities. A&A 88, 23.
